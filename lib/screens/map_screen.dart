@@ -1,5 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 import '../constants/colors.dart';
 import '../models/user_role.dart';
 import '../providers/theme_provider.dart';
@@ -11,15 +16,177 @@ import 'help_screen.dart';
 
 class MapScreen extends StatefulWidget {
   final UserRole userRole;
+  final String? driverId;
 
-  const MapScreen({super.key, required this.userRole});
+  const MapScreen({super.key, required this.userRole, this.driverId});
 
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
 
 class _MapScreenState extends State<MapScreen> {
+  // Map Controller
+  final MapController _mapController = MapController();
+
+  // Initial Position: UNAH Campus Cortés (UNAH-VS)
+  static const LatLng _unahVsLocation = LatLng(15.52974, -88.03742);
+
+  // State for user location
+  LatLng? _userLocation;
+  StreamSubscription<Position>? _positionStream;
+
+  // Markers
+  List<Marker> get _allMarkers {
+    final markers = <Marker>[
+      // University Marker (Home)
+      Marker(
+        point: _unahVsLocation,
+        width: 80,
+        height: 80,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.primaryBlue, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowColor.withValues(alpha: 0.3),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.account_balance_rounded,
+            color: AppColors.primaryBlue,
+            size: 25,
+          ),
+        ),
+      ),
+    ];
+
+    // Add User Location Marker
+    if (_userLocation != null) {
+      final isDriverActive =
+          widget.userRole == UserRole.driver && _isRouteActive;
+
+      // Extract route number if driver
+      String? routeNumber;
+      if (isDriverActive && widget.driverId != null) {
+        try {
+          // Assuming format BUSXXYY, take XX
+          final routePart = widget.driverId!.substring(3, 5);
+          routeNumber = int.parse(routePart).toString();
+        } catch (_) {
+          routeNumber = '?';
+        }
+      }
+
+      // Dynamic sizing based on zoom
+      final zoom = _mapController.camera.zoom;
+      final baseSize = isDriverActive ? 75.0 : 60.0;
+      final scale = (zoom / 16.0).clamp(0.6, 1.2);
+      final markerSize = baseSize * scale;
+
+      markers.add(
+        Marker(
+          point: _userLocation!,
+          width: markerSize,
+          height: markerSize,
+          child:
+              isDriverActive
+                  ? Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(4 * scale),
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.primaryYellow,
+                            width: 2.5 * scale,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 10 * scale,
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: Opacity(
+                            opacity: 0.8,
+                            child: Image.asset(
+                              'assets/images/rutapuma_logo.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Route Number Overlay
+                      Positioned(
+                        top: 12 * scale,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 6 * scale,
+                            vertical: 2 * scale,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryBlue,
+                            borderRadius: BorderRadius.circular(10 * scale),
+                            border: Border.all(
+                              color: AppColors.white,
+                              width: 1.5 * scale,
+                            ),
+                          ),
+                          child: Text(
+                            routeNumber ?? '',
+                            style: TextStyle(
+                              color: AppColors.white,
+                              fontSize: 16 * scale,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                  : Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.softBlue.withValues(alpha: 0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 18 * scale,
+                        height: 18 * scale,
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 3 * scale,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 4 * scale,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+        ),
+      );
+    }
+    return markers;
+  }
+
   bool _isMenuOpen = false;
+  bool _isSatelliteMode = false;
+  bool _isRouteActive = false;
+  bool _hasCenteredOnUser = false;
   String _selectedRoute = 'Todas las rutas';
   final List<String> _routes = [
     'Todas las rutas',
@@ -40,6 +207,51 @@ class _MapScreenState extends State<MapScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _checkLocationPermission();
+  }
+
+  Future<void> _checkLocationPermission() async {
+    var status = await Permission.location.status;
+    if (status.isDenied) {
+      status = await Permission.location.request();
+    }
+
+    if (status.isGranted) {
+      _startLocationTracking();
+    }
+  }
+
+  void _startLocationTracking() {
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen((Position position) {
+      if (mounted) {
+        final newLocation = LatLng(position.latitude, position.longitude);
+        setState(() {
+          _userLocation = newLocation;
+        });
+
+        // Auto-center on user for the first time
+        if (!_hasCenteredOnUser) {
+          _mapController.move(newLocation, 17.0);
+          _hasCenteredOnUser = true;
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionStream?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Consume theme to rebuild on toggle
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -48,8 +260,8 @@ class _MapScreenState extends State<MapScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Map Placeholder
-          _buildMapPlaceholder(themeProvider.isDarkMode),
+          // Map
+          _buildMap(themeProvider.isDarkMode),
           // Top Bar
           _buildTopBar(themeProvider),
           // Route Selector (for users)
@@ -64,69 +276,34 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildMapPlaceholder(bool isDark) {
-    return Container(
-      color: isDark ? AppColors.darkBackground : AppColors.lightGrey,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Image.asset(
-                'assets/images/rutapuma_logo.png',
-                width: 120,
-                height: 120,
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Mapa de RutaPuma',
-              style: TextStyle(
-                fontSize: 22,
-                color: isDark ? AppColors.white : AppColors.darkGrey,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.white,
-                borderRadius: BorderRadius.circular(30),
-                border:
-                    isDark
-                        ? Border.all(color: AppColors.darkBorder, width: 1.5)
-                        : null,
-                boxShadow:
-                    isDark
-                        ? null
-                        : [
-                          BoxShadow(
-                            color: AppColors.shadowColor.withOpacity(0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-              ),
-              child: Text(
-                'Google Maps se integrará aquí',
-                style: TextStyle(
-                  fontSize: 14,
-                  color:
-                      isDark ? AppColors.primaryYellow : AppColors.primaryBlue,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
+  Widget _buildMap(bool isDark) {
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _unahVsLocation,
+        initialZoom: 16.0,
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all,
         ),
+        onPositionChanged: (position, hasGesture) {
+          // Rebuild to update marker scale based on zoom
+          if (mounted) setState(() {});
+        },
       ),
+      children: [
+        TileLayer(
+          urlTemplate:
+              _isSatelliteMode
+                  ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                  : (isDark
+                      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+          userAgentPackageName: 'com.unah.rutapuma.rutapuma',
+          tileDisplay: const TileDisplay.fadeIn(),
+          retinaMode: true,
+        ),
+        MarkerLayer(markers: _allMarkers),
+      ],
     );
   }
 
@@ -154,7 +331,7 @@ class _MapScreenState extends State<MapScreen> {
                   ? null
                   : [
                     BoxShadow(
-                      color: AppColors.shadowColor.withOpacity(0.3),
+                      color: AppColors.shadowColor.withValues(alpha: 0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -190,7 +367,7 @@ class _MapScreenState extends State<MapScreen> {
                   Text(
                     widget.userRole.displayName,
                     style: TextStyle(
-                      color: AppColors.white.withOpacity(0.9),
+                      color: AppColors.white.withValues(alpha: 0.9),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -234,7 +411,7 @@ class _MapScreenState extends State<MapScreen> {
                   ? null
                   : [
                     BoxShadow(
-                      color: AppColors.shadowColor.withOpacity(0.3),
+                      color: AppColors.shadowColor.withValues(alpha: 0.3),
                       blurRadius: 15,
                       offset: const Offset(0, 8),
                     ),
@@ -273,7 +450,9 @@ class _MapScreenState extends State<MapScreen> {
                             color:
                                 isDark
                                     ? AppColors.darkAccent
-                                    : AppColors.primaryBlue.withOpacity(0.1),
+                                    : AppColors.primaryBlue.withValues(
+                                      alpha: 0.1,
+                                    ),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -325,7 +504,7 @@ class _MapScreenState extends State<MapScreen> {
                   ? null
                   : [
                     BoxShadow(
-                      color: AppColors.shadowColor.withOpacity(0.4),
+                      color: AppColors.shadowColor.withValues(alpha: 0.4),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -334,7 +513,7 @@ class _MapScreenState extends State<MapScreen> {
         child: Column(
           children: [
             Text(
-              'Estás en Ruta',
+              _isRouteActive ? 'Ruta en Curso 🚌' : '¿Listo para iniciar?',
               style: TextStyle(
                 color: isDark ? AppColors.white : AppColors.darkBlue,
                 fontSize: 20,
@@ -348,17 +527,49 @@ class _MapScreenState extends State<MapScreen> {
                 _buildDriverButton(
                   icon: Icons.play_arrow_rounded,
                   label: 'Iniciar',
-                  color: AppColors.green,
+                  color: _isRouteActive ? AppColors.grey : AppColors.green,
+                  onTap:
+                      _isRouteActive
+                          ? null
+                          : () {
+                            setState(() => _isRouteActive = true);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Ruta Iniciada. ¡Buen viaje!'),
+                                backgroundColor: AppColors.green,
+                              ),
+                            );
+                          },
                 ),
                 _buildDriverButton(
                   icon: Icons.pause_rounded,
                   label: 'Pausar',
                   color: AppColors.primaryYellow,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ruta Pausada'),
+                        backgroundColor: AppColors.primaryYellow,
+                      ),
+                    );
+                  },
                 ),
                 _buildDriverButton(
                   icon: Icons.stop_rounded,
                   label: 'Fin',
-                  color: AppColors.red,
+                  color: !_isRouteActive ? AppColors.grey : AppColors.red,
+                  onTap:
+                      !_isRouteActive
+                          ? null
+                          : () {
+                            setState(() => _isRouteActive = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Ruta Finalizada'),
+                                backgroundColor: AppColors.red,
+                              ),
+                            );
+                          },
                 ),
               ],
             ),
@@ -372,41 +583,48 @@ class _MapScreenState extends State<MapScreen> {
     required IconData icon,
     required String label,
     required Color color,
+    VoidCallback? onTap,
   }) {
     final isDark =
         Provider.of<ThemeProvider>(context, listen: false).isDarkMode;
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.4),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.4),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+              border: Border.all(
+                color: isDark ? AppColors.darkAccent : AppColors.white,
+                width: 3,
               ),
-            ],
-            border: Border.all(
-              color: isDark ? AppColors.darkAccent : AppColors.white,
-              width: 3,
+            ),
+            child: Icon(icon, color: AppColors.white, size: 32),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color:
+                  color == AppColors.grey
+                      ? AppColors.grey
+                      : (isDark ? AppColors.grey : AppColors.darkGrey),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          child: Icon(icon, color: AppColors.white, size: 32),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: isDark ? AppColors.grey : AppColors.darkGrey,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -438,7 +656,7 @@ class _MapScreenState extends State<MapScreen> {
                   ? null
                   : [
                     BoxShadow(
-                      color: AppColors.shadowColor.withOpacity(0.5),
+                      color: AppColors.shadowColor.withValues(alpha: 0.5),
                       blurRadius: 30,
                       offset: const Offset(5, 0),
                     ),
@@ -474,7 +692,7 @@ class _MapScreenState extends State<MapScreen> {
                   color:
                       isDark
                           ? AppColors.darkAccent
-                          : AppColors.primaryBlue.withOpacity(0.1),
+                          : AppColors.primaryBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: Row(
@@ -569,7 +787,7 @@ class _MapScreenState extends State<MapScreen> {
                       vertical: 16,
                       horizontal: 24,
                     ),
-                    backgroundColor: AppColors.red.withOpacity(0.1),
+                    backgroundColor: AppColors.red.withValues(alpha: 0.1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -618,6 +836,7 @@ class _MapScreenState extends State<MapScreen> {
         // Handle specific menu actions
         if (title == 'Avisos') {
           Future.delayed(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -629,6 +848,7 @@ class _MapScreenState extends State<MapScreen> {
 
         if (title == 'Ruta Favorita') {
           Future.delayed(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const MyRouteScreen()),
@@ -638,6 +858,7 @@ class _MapScreenState extends State<MapScreen> {
 
         if (title == 'Enviar Mensaje') {
           Future.delayed(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -649,6 +870,7 @@ class _MapScreenState extends State<MapScreen> {
 
         if (title == 'Ayuda') {
           Future.delayed(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const HelpScreen()),
@@ -666,8 +888,50 @@ class _MapScreenState extends State<MapScreen> {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         FloatingActionButton(
+          heroTag: 'layers',
+          onPressed: () {
+            setState(() {
+              _isSatelliteMode = !_isSatelliteMode;
+            });
+          },
+          backgroundColor:
+              _isSatelliteMode
+                  ? AppColors.primaryBlue
+                  : AppColors.primaryYellow,
+          elevation: isDark ? 0 : 6,
+          shape:
+              isDark
+                  ? RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(
+                      color: AppColors.darkBorder,
+                      width: 1.5,
+                    ),
+                  )
+                  : null,
+          child: Icon(
+            _isSatelliteMode ? Icons.map_rounded : Icons.layers_outlined,
+            color: _isSatelliteMode ? Colors.white : AppColors.darkBlue,
+            size: 30,
+          ),
+        ),
+        const SizedBox(height: 16),
+        FloatingActionButton(
           heroTag: 'gps',
-          onPressed: () {},
+          onPressed: () {
+            if (_userLocation != null) {
+              _mapController.move(_userLocation!, 17.0);
+            } else {
+              // Fallback to University if location unknown
+              _mapController.move(_unahVsLocation, 16.0);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Obteniendo tu ubicación...'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
           backgroundColor: AppColors.primaryYellow,
           elevation: isDark ? 0 : 6,
           shape:

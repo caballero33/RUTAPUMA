@@ -48,10 +48,49 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _handleLogin() {
     if (_formKey.currentState!.validate()) {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      if (_selectedRole == UserRole.driver) {
+        // Driver Authentication Logic
+        bool authenticated = false;
+        // Check 14 routes, 2 IDs each
+        for (int r = 1; r <= 14; r++) {
+          final rStr = r.toString().padLeft(2, '0');
+          for (int i = 1; i <= 2; i++) {
+            final iStr = i.toString().padLeft(2, '0');
+            final id = 'BUS$rStr$iStr';
+            final key = 'ruta$rStr$iStr';
+            if (email.toUpperCase() == id && password == key) {
+              authenticated = true;
+              break;
+            }
+          }
+          if (authenticated) break;
+        }
+
+        if (!authenticated) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('ID o Llave del bus incorrecta'),
+              backgroundColor: AppColors.red,
+            ),
+          );
+          return;
+        }
+      }
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => MapScreen(userRole: _selectedRole),
+          builder:
+              (context) => MapScreen(
+                userRole: _selectedRole,
+                driverId:
+                    _selectedRole == UserRole.driver
+                        ? email.toUpperCase()
+                        : null,
+              ),
         ),
       );
     }
@@ -172,22 +211,40 @@ class _LoginScreenState extends State<LoginScreen>
 
                             // Fields
                             CustomTextField(
-                              label: 'Correo Electrónico',
-                              hint: 'estudiante@unah.hn',
-                              prefixIcon: Icons.email_rounded,
+                              label:
+                                  _selectedRole == UserRole.driver
+                                      ? 'ID del Bus'
+                                      : 'Correo Institucional',
+                              hint:
+                                  _selectedRole == UserRole.driver
+                                      ? '********'
+                                      : 'estudiante@unah.hn',
+                              prefixIcon:
+                                  _selectedRole == UserRole.driver
+                                      ? Icons.numbers_rounded
+                                      : Icons.email_rounded,
                               controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
+                              keyboardType:
+                                  _selectedRole == UserRole.driver
+                                      ? TextInputType.text
+                                      : TextInputType.emailAddress,
                               validator: (value) {
                                 if (value == null || value.isEmpty)
                                   return 'Requerido';
-                                if (!value.contains('@'))
+
+                                if (_selectedRole == UserRole.user &&
+                                    !value.contains('@')) {
                                   return 'Correo inválido';
+                                }
                                 return null;
                               },
                             ),
                             const SizedBox(height: 20),
                             CustomTextField(
-                              label: 'Contraseña',
+                              label:
+                                  _selectedRole == UserRole.driver
+                                      ? 'Llave del Bus'
+                                      : 'Contraseña',
                               hint: '••••••••',
                               prefixIcon: Icons.lock_rounded,
                               controller: _passwordController,
@@ -195,8 +252,8 @@ class _LoginScreenState extends State<LoginScreen>
                               validator: (value) {
                                 if (value == null || value.isEmpty)
                                   return 'Requerido';
-                                if (value.length < 6)
-                                  return 'Mínimo 6 caracteres';
+                                if (value.length < 4)
+                                  return 'Mínimo 4 caracteres';
                                 return null;
                               },
                             ),
@@ -250,29 +307,30 @@ class _LoginScreenState extends State<LoginScreen>
                                       ),
                                     ],
                                   ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder:
-                                              (context) =>
-                                                  const ForgotPasswordScreen(),
+                                  if (_selectedRole == UserRole.user)
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (context) =>
+                                                    const ForgotPasswordScreen(),
+                                          ),
+                                        );
+                                      },
+                                      child: Text(
+                                        '¿Olvidaste contraseña?',
+                                        style: TextStyle(
+                                          color:
+                                              isDark
+                                                  ? AppColors.primaryYellow
+                                                  : AppColors.primaryBlue,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                      );
-                                    },
-                                    child: Text(
-                                      '¿Olvidaste contraseña?',
-                                      style: TextStyle(
-                                        color:
-                                            isDark
-                                                ? AppColors.primaryYellow
-                                                : AppColors.primaryBlue,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -294,43 +352,44 @@ class _LoginScreenState extends State<LoginScreen>
 
                             const SizedBox(height: 20),
 
-                            // Register
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '¿No tienes cuenta? ',
-                                  style: TextStyle(
-                                    color:
-                                        isDark
-                                            ? AppColors.white.withOpacity(0.7)
-                                            : AppColors.darkGrey,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder:
-                                            (context) => const RegisterScreen(),
-                                      ),
-                                    );
-                                  },
-                                  child: const Text(
-                                    'Regístrate aquí',
+                            if (_selectedRole == UserRole.user)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '¿No tienes cuenta? ',
                                     style: TextStyle(
                                       color:
-                                          AppColors
-                                              .primaryYellow, // Accent color
-                                      fontWeight: FontWeight.bold,
+                                          isDark
+                                              ? AppColors.white.withOpacity(0.7)
+                                              : AppColors.darkGrey,
                                       fontSize: 13,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder:
+                                              (context) =>
+                                                  const RegisterScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text(
+                                      'Regístrate aquí',
+                                      style: TextStyle(
+                                        color:
+                                            AppColors
+                                                .primaryYellow, // Accent color
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       ),
@@ -371,7 +430,7 @@ class _LoginScreenState extends State<LoginScreen>
       ),
       child: Row(
         children: [
-          Expanded(child: _buildRoleChip(UserRole.user, 'Usuario', isDark)),
+          Expanded(child: _buildRoleChip(UserRole.user, 'Estudiante', isDark)),
           Expanded(child: _buildRoleChip(UserRole.driver, 'Conductor', isDark)),
         ],
       ),
