@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../constants/colors.dart';
 import '../models/user_role.dart';
+import '../providers/theme_provider.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import 'map_screen.dart';
+import 'register_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -44,7 +48,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _handleLogin() {
     if (_formKey.currentState!.validate()) {
-      // Navigate to map screen
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -56,291 +59,361 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Access theme provider for toggling
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    // Use Theme.of(context) for visual properties to ensure sync with MaterialApp
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.primaryYellow,
-              AppColors.primaryYellow,
-              AppColors.white,
-            ],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: Stack(
+        children: [
+          // Background Gradient
+          // Solid Background
+          Container(
+            color: isDark ? AppColors.darkBackground : AppColors.primaryYellow,
           ),
-        ),
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
+
+          // Main Content Card
+          Center(
             child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.fromLTRB(
+                24,
+                24,
+                24,
+                100,
+              ), // Extra bottom padding
+              child: FadeTransition(
+                opacity: _fadeAnimation,
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 40),
-                    // Logo and Title
-                    _buildHeader(),
-                    const SizedBox(height: 50),
-                    // Login Form
-                    _buildLoginForm(),
+                    // Logo Floating above text
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: const BoxDecoration(
+                        color: Colors.transparent, // Removed white background
+                        shape: BoxShape.circle,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Image.asset(
+                          'assets/images/rutapuma_logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Welcome Text
+                    Text(
+                      'Bienvenido a RutaPuma',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.white,
+                        shadows: [
+                          Shadow(
+                            color: AppColors.black.withOpacity(0.2),
+                            offset: const Offset(0, 2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tu transporte universitario seguro',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: AppColors.white.withOpacity(0.9),
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 30),
+
+                    // Login Card
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurface : AppColors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        border:
+                            isDark
+                                ? Border.all(
+                                  color: AppColors.darkBorder,
+                                  width: 1.5,
+                                )
+                                : null,
+                        boxShadow:
+                            isDark
+                                ? null
+                                : [
+                                  BoxShadow(
+                                    color: AppColors.shadowColor.withOpacity(
+                                      0.2,
+                                    ),
+                                    blurRadius: 30,
+                                    offset: const Offset(0, 15),
+                                  ),
+                                ],
+                      ),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Role Selection
+                            _buildRoleSelectorWithContext(context, isDark),
+                            const SizedBox(height: 24),
+
+                            // Fields
+                            CustomTextField(
+                              label: 'Correo Electrónico',
+                              hint: 'estudiante@unah.hn',
+                              prefixIcon: Icons.email_rounded,
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                if (value == null || value.isEmpty)
+                                  return 'Requerido';
+                                if (!value.contains('@'))
+                                  return 'Correo inválido';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            CustomTextField(
+                              label: 'Contraseña',
+                              hint: '••••••••',
+                              prefixIcon: Icons.lock_rounded,
+                              controller: _passwordController,
+                              obscureText: true,
+                              validator: (value) {
+                                if (value == null || value.isEmpty)
+                                  return 'Requerido';
+                                if (value.length < 6)
+                                  return 'Mínimo 6 caracteres';
+                                return null;
+                              },
+                            ),
+
+                            // Remember & Forgot Row
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        height: 24,
+                                        width: 24,
+                                        child: Checkbox(
+                                          value: true,
+                                          onChanged: (v) {},
+                                          activeColor:
+                                              isDark
+                                                  ? AppColors.primaryYellow
+                                                  : AppColors.primaryBlue,
+                                          side: BorderSide(
+                                            color:
+                                                isDark
+                                                    ? AppColors.white
+                                                        .withOpacity(0.5)
+                                                    : AppColors.grey,
+                                            width: 1.5,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Recordarme',
+                                        style: TextStyle(
+                                          color:
+                                              isDark
+                                                  ? AppColors.white.withOpacity(
+                                                    0.7,
+                                                  )
+                                                  : AppColors.darkGrey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder:
+                                              (context) =>
+                                                  const ForgotPasswordScreen(),
+                                        ),
+                                      );
+                                    },
+                                    child: Text(
+                                      '¿Olvidaste contraseña?',
+                                      style: TextStyle(
+                                        color:
+                                            isDark
+                                                ? AppColors.primaryYellow
+                                                : AppColors.primaryBlue,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Login Button
+                            CustomButton(
+                              text: 'INICIAR SESIÓN',
+                              onPressed: _handleLogin,
+                              gradient: isDark ? AppColors.blueGradient : null,
+                              color:
+                                  isDark
+                                      ? null
+                                      : AppColors
+                                          .primaryBlue, // Dark blue button on white card
+                              textColor: AppColors.white,
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Register
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '¿No tienes cuenta? ',
+                                  style: TextStyle(
+                                    color:
+                                        isDark
+                                            ? AppColors.white.withOpacity(0.7)
+                                            : AppColors.darkGrey,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) => const RegisterScreen(),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    'Regístrate aquí',
+                                    style: TextStyle(
+                                      color:
+                                          AppColors
+                                              .primaryYellow, // Accent color
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildHeader() {
-    return Column(
-      children: [
-        // Logo placeholder - you can replace with actual logo
-        Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primaryBlue.withOpacity(0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+          // Theme Toggle (Moved to end for Z-order)
+          Positioned(
+            top: 40,
+            right: 20,
+            child: IconButton(
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                color: isDark ? AppColors.primaryYellow : AppColors.white,
+                size: 30,
               ),
-            ],
-          ),
-          child: const Icon(
-            Icons.directions_bus,
-            size: 60,
-            color: AppColors.primaryBlue,
-          ),
-        ),
-        const SizedBox(height: 20),
-        const Text(
-          'RUTAPUMA',
-          style: TextStyle(
-            fontSize: 36,
-            fontWeight: FontWeight.bold,
-            color: AppColors.primaryBlue,
-            letterSpacing: 2,
-            shadows: [
-              Shadow(
-                color: AppColors.primaryBlue,
-                offset: Offset(2, 2),
-                blurRadius: 4,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'UNAH Campus Cortés',
-          style: TextStyle(
-            fontSize: 16,
-            color: AppColors.primaryBlue,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLoginForm() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryBlue.withOpacity(0.2),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
+              onPressed: () {
+                themeProvider.toggleTheme();
+              },
+            ),
           ),
         ],
       ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Iniciar Sesión',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primaryBlue,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 30),
-            // Role Selection
-            _buildRoleSelector(),
-            const SizedBox(height: 24),
-            // Email Field
-            CustomTextField(
-              label: 'Correo Electrónico',
-              hint: 'estudiante@unah.hn',
-              prefixIcon: Icons.email_outlined,
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor ingresa tu correo';
-                }
-                if (!value.contains('@')) {
-                  return 'Ingresa un correo válido';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            // Password Field
-            CustomTextField(
-              label: 'Contraseña',
-              hint: '••••••••',
-              prefixIcon: Icons.lock_outline,
-              controller: _passwordController,
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor ingresa tu contraseña';
-                }
-                if (value.length < 6) {
-                  return 'La contraseña debe tener al menos 6 caracteres';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            // Forgot Password
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () {
-                  // TODO: Implement forgot password
-                },
-                child: const Text(
-                  '¿Olvidaste tu contraseña?',
-                  style: TextStyle(
-                    color: AppColors.primaryBlue,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Login Button
-            CustomButton(
-              text: 'Ingresar',
-              onPressed: _handleLogin,
-              gradient: AppColors.primaryGradient,
-            ),
-            const SizedBox(height: 16),
-            // Register Link
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  '¿No tienes cuenta? ',
-                  style: TextStyle(color: AppColors.darkGrey),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // TODO: Navigate to register screen
-                  },
-                  child: const Text(
-                    'Regístrate',
-                    style: TextStyle(
-                      color: AppColors.primaryBlue,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+    );
+  }
+
+  // Refactored Role Selector to be cleaner
+  Widget _buildRoleSelectorWithContext(BuildContext context, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.black.withOpacity(0.2) : AppColors.lightGrey,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _buildRoleChip(UserRole.user, 'Usuario', isDark)),
+          Expanded(child: _buildRoleChip(UserRole.driver, 'Conductor', isDark)),
+        ],
       ),
     );
   }
 
-  Widget _buildRoleSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Tipo de Usuario',
-          style: TextStyle(
-            color: AppColors.darkGrey,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildRoleOption(UserRole.user)),
-            const SizedBox(width: 12),
-            Expanded(child: _buildRoleOption(UserRole.driver)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRoleOption(UserRole role) {
+  Widget _buildRoleChip(UserRole role, String label, bool isDark) {
     final isSelected = _selectedRole == role;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedRole = role;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.all(16),
+      onTap: () => setState(() => _selectedRole = role),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          gradient: isSelected ? AppColors.blueGradient : null,
-          color: isSelected ? null : AppColors.lightGrey.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(
-            color: isSelected ? AppColors.primaryBlue : AppColors.lightGrey,
-            width: isSelected ? 2 : 1,
-          ),
+          color:
+              isSelected
+                  ? (isDark ? AppColors.primaryBlue : AppColors.white)
+                  : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow:
+              isSelected && !isDark
+                  ? [
+                    BoxShadow(
+                      color: AppColors.shadowColor.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                  : [],
         ),
-        child: Column(
-          children: [
-            Icon(
-              role == UserRole.user ? Icons.person : Icons.drive_eta,
-              color: isSelected ? AppColors.white : AppColors.primaryBlue,
-              size: 32,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              role.displayName,
-              style: TextStyle(
-                color: isSelected ? AppColors.white : AppColors.darkGrey,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              role.description,
-              style: TextStyle(
-                color:
-                    isSelected
-                        ? AppColors.white.withOpacity(0.9)
-                        : AppColors.grey,
-                fontSize: 11,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color:
+                isSelected
+                    ? (isDark ? AppColors.white : AppColors.primaryBlue)
+                    : (isDark
+                        ? AppColors.white.withOpacity(0.5)
+                        : AppColors.darkGrey),
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+            fontSize: 14,
+          ),
         ),
       ),
     );
