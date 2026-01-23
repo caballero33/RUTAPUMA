@@ -321,11 +321,24 @@ class _MapScreenState extends State<MapScreen> {
 
     // Listen to active buses from Firebase (for users only)
     if (widget.userRole == UserRole.user) {
+      debugPrint(
+        '👨‍🎓 Usuario estudiante - Escuchando buses desde Firebase...',
+      );
       _busesStream = _databaseService.getActiveBuses().listen((buses) {
+        debugPrint('📡 Buses recibidos desde Firebase: ${buses.length}');
+        for (var bus in buses) {
+          debugPrint(
+            '   🚌 ${bus.busId} - ${bus.routeName} - Activo: ${bus.isActive}',
+          );
+          debugPrint(
+            '      📍 Lat: ${bus.currentLocation.latitude}, Lng: ${bus.currentLocation.longitude}',
+          );
+        }
         if (mounted) {
           setState(() {
             _activeBuses = buses;
           });
+          debugPrint('✅ Estado actualizado con ${_activeBuses.length} buses');
         }
       });
     }

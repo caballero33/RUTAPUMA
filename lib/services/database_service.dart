@@ -1,4 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/bus_model.dart';
 
@@ -47,25 +48,42 @@ class DatabaseService {
   // Listen to all active buses (for users)
   Stream<List<BusModel>> getActiveBuses() {
     return _database.child('buses').onValue.map((event) {
+      debugPrint('🔥 Firebase onValue triggered');
       final List<BusModel> buses = [];
 
       if (event.snapshot.exists) {
+        debugPrint('✅ Snapshot exists');
         final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+        debugPrint('📦 Datos crudos de Firebase: ${data.keys.length} buses');
 
         data.forEach((busId, busData) {
-          final bus = BusModel.fromJson(
-            busId,
-            Map<String, dynamic>.from(busData as Map),
-          );
+          try {
+            final bus = BusModel.fromJson(
+              busId,
+              Map<String, dynamic>.from(busData as Map),
+            );
 
-          // Only include active buses updated in the last 5 minutes
-          final timeDiff = DateTime.now().difference(bus.timestamp);
-          if (bus.isActive && timeDiff.inMinutes < 5) {
-            buses.add(bus);
+            // Only include active buses updated in the last 5 minutes
+            final timeDiff = DateTime.now().difference(bus.timestamp);
+            debugPrint(
+              '   🚌 $busId - Activo: ${bus.isActive}, Tiempo: ${timeDiff.inMinutes} min',
+            );
+
+            if (bus.isActive && timeDiff.inMinutes < 5) {
+              buses.add(bus);
+              debugPrint('      ✅ Bus agregado a la lista');
+            } else {
+              debugPrint('      ❌ Bus filtrado (inactivo o muy antiguo)');
+            }
+          } catch (e) {
+            debugPrint('   ❌ Error parseando bus $busId: $e');
           }
         });
+      } else {
+        debugPrint('❌ Snapshot NO exists - No hay buses en Firebase');
       }
 
+      debugPrint('📊 Total buses activos para mostrar: ${buses.length}');
       return buses;
     });
   }
