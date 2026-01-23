@@ -45,6 +45,21 @@ class DatabaseService {
     }
   }
 
+  // Helper method to convert Firebase Map to Map<String, dynamic>
+  Map<String, dynamic> _convertMap(dynamic data) {
+    if (data is Map) {
+      return Map<String, dynamic>.from(
+        data.map((key, value) {
+          if (value is Map) {
+            return MapEntry(key.toString(), _convertMap(value));
+          }
+          return MapEntry(key.toString(), value);
+        }),
+      );
+    }
+    return {};
+  }
+
   // Listen to all active buses (for users)
   Stream<List<BusModel>> getActiveBuses() {
     return _database.child('buses').onValue.map((event) {
@@ -53,15 +68,12 @@ class DatabaseService {
 
       if (event.snapshot.exists) {
         debugPrint('✅ Snapshot exists');
-        final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+        final data = _convertMap(event.snapshot.value);
         debugPrint('📦 Datos crudos de Firebase: ${data.keys.length} buses');
 
         data.forEach((busId, busData) {
           try {
-            final bus = BusModel.fromJson(
-              busId,
-              Map<String, dynamic>.from(busData as Map),
-            );
+            final bus = BusModel.fromJson(busId, _convertMap(busData));
 
             // Only include active buses updated in the last 5 minutes
             final timeDiff = DateTime.now().difference(bus.timestamp);
@@ -92,7 +104,7 @@ class DatabaseService {
   Stream<BusModel?> getBusById(String busId) {
     return _database.child('buses').child(busId).onValue.map((event) {
       if (event.snapshot.exists) {
-        final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+        final data = _convertMap(event.snapshot.value);
         return BusModel.fromJson(busId, data);
       }
       return null;
@@ -110,13 +122,10 @@ class DatabaseService {
           final List<BusModel> buses = [];
 
           if (event.snapshot.exists) {
-            final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+            final data = _convertMap(event.snapshot.value);
 
             data.forEach((busId, busData) {
-              final bus = BusModel.fromJson(
-                busId,
-                Map<String, dynamic>.from(busData as Map),
-              );
+              final bus = BusModel.fromJson(busId, _convertMap(busData));
 
               // Only include active buses
               final timeDiff = DateTime.now().difference(bus.timestamp);
@@ -156,13 +165,10 @@ class DatabaseService {
       final List<Map<String, dynamic>> routes = [];
 
       if (snapshot.exists) {
-        final data = Map<String, dynamic>.from(snapshot.value as Map);
+        final data = _convertMap(snapshot.value);
 
         data.forEach((routeId, routeData) {
-          routes.add({
-            'routeId': routeId,
-            ...Map<String, dynamic>.from(routeData as Map),
-          });
+          routes.add({'routeId': routeId, ..._convertMap(routeData)});
         });
       }
 
