@@ -375,6 +375,12 @@ class _MapScreenState extends State<MapScreen> {
               routeName += '?';
             }
 
+            debugPrint('🚌 Actualizando ubicación de bus: ${widget.driverId}');
+            debugPrint(
+              '📍 Ubicación: ${newLocation.latitude}, ${newLocation.longitude}',
+            );
+            debugPrint('🛣️ Ruta: $routeName');
+
             await _databaseService.updateBusLocation(
               busId: widget.driverId!,
               driverId: widget.driverId!,
@@ -383,9 +389,20 @@ class _MapScreenState extends State<MapScreen> {
               speed: position.speed * 3.6, // m/s to km/h
               heading: position.heading,
             );
+
+            debugPrint('✅ Ubicación actualizada en Firebase');
           } catch (e) {
-            // Silently fail - don't interrupt the UI
-            debugPrint('Error updating bus location: $e');
+            debugPrint('❌ Error updating bus location: $e');
+          }
+        } else {
+          // Debug why it's not updating
+          if (widget.userRole == UserRole.driver) {
+            debugPrint('⚠️ No se actualiza Firebase:');
+            debugPrint(
+              '   - Es conductor: ${widget.userRole == UserRole.driver}',
+            );
+            debugPrint('   - Ruta activa: $_isRouteActive');
+            debugPrint('   - Tiene ID: ${widget.driverId != null}');
           }
         }
       }
@@ -688,7 +705,11 @@ class _MapScreenState extends State<MapScreen> {
                       _isRouteActive
                           ? null
                           : () {
+                            debugPrint('🟢 Botón INICIAR presionado');
                             setState(() => _isRouteActive = true);
+                            debugPrint(
+                              '✅ Estado cambiado: _isRouteActive = $_isRouteActive',
+                            );
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('Ruta Iniciada. ¡Buen viaje!'),
