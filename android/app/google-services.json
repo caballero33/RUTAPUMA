@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "565794019725",
+    "project_id": "deudasaeisnv",
+    "storage_bucket": "deudasaeisnv.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:565794019725:android:3add4fa5c0b270c9ab85c4",
+        "android_client_info": {
+          "package_name": "com.unah.rutapuma.rutapuma"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAd9Oa4-__KkS19Hk8yqrtR-mEduGmX1EY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

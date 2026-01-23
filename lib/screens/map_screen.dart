@@ -7,7 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import '../constants/colors.dart';
 import '../models/user_role.dart';
+import '../models/bus_model.dart';
 import '../providers/theme_provider.dart';
+import '../services/database_service.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'my_route_screen.dart';
@@ -28,12 +30,19 @@ class _MapScreenState extends State<MapScreen> {
   // Map Controller
   final MapController _mapController = MapController();
 
+  // Firebase Database Service
+  final DatabaseService _databaseService = DatabaseService();
+
   // Initial Position: UNAH Campus Cortés (UNAH-VS)
   static const LatLng _unahVsLocation = LatLng(15.52974, -88.03742);
 
   // State for user location
   LatLng? _userLocation;
   StreamSubscription<Position>? _positionStream;
+
+  // State for buses from Firebase
+  List<BusModel> _activeBuses = [];
+  StreamSubscription<List<BusModel>>? _busesStream;
 
   // Markers
   List<Marker> get _allMarkers {
@@ -64,7 +73,101 @@ class _MapScreenState extends State<MapScreen> {
       ),
     ];
 
-    // Add User Location Marker
+    // Add markers for all active buses from Firebase (for users)
+    if (widget.userRole == UserRole.user) {
+      // Use default zoom if map controller is not ready
+      double zoom = 16.0;
+      try {
+        zoom = _mapController.camera.zoom;
+      } catch (_) {
+        // Map controller not ready yet, use default
+      }
+      final scale = (zoom / 16.0).clamp(0.6, 1.2);
+
+      for (final bus in _activeBuses) {
+        // Filter by selected route if not "Todas las rutas"
+        if (_selectedRoute != 'Todas las rutas' &&
+            !bus.routeName.contains(_selectedRoute.replaceAll('Ruta ', ''))) {
+          continue;
+        }
+
+        // Extract route number from busId (BUSXXYY -> XX)
+        String routeNumber = '?';
+        try {
+          final routePart = bus.busId.substring(3, 5);
+          routeNumber = int.parse(routePart).toString();
+        } catch (_) {}
+
+        final markerSize = 75.0 * scale;
+
+        markers.add(
+          Marker(
+            point: bus.currentLocation,
+            width: markerSize,
+            height: markerSize,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(4 * scale),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primaryYellow,
+                      width: 2.5 * scale,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 10 * scale,
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: Opacity(
+                      opacity: 0.8,
+                      child: Image.asset(
+                        'assets/images/rutapuma_logo.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+                // Route Number Overlay
+                Positioned(
+                  top: 12 * scale,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 6 * scale,
+                      vertical: 2 * scale,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryBlue,
+                      borderRadius: BorderRadius.circular(10 * scale),
+                      border: Border.all(
+                        color: AppColors.white,
+                        width: 1.5 * scale,
+                      ),
+                    ),
+                    child: Text(
+                      routeNumber,
+                      style: TextStyle(
+                        color: AppColors.white,
+                        fontSize: 16 * scale,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    // Add User Location Marker (for users) or Driver marker (for drivers)
     if (_userLocation != null) {
       final isDriverActive =
           widget.userRole == UserRole.driver && _isRouteActive;
@@ -82,7 +185,12 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       // Dynamic sizing based on zoom
-      final zoom = _mapController.camera.zoom;
+      double zoom = 16.0;
+      try {
+        zoom = _mapController.camera.zoom;
+      } catch (_) {
+        // Map controller not ready yet, use default
+      }
       final baseSize = isDriverActive ? 75.0 : 60.0;
       final scale = (zoom / 16.0).clamp(0.6, 1.2);
       final markerSize = baseSize * scale;
@@ -210,6 +318,17 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
     _checkLocationPermission();
+
+    // Listen to active buses from Firebase (for users only)
+    if (widget.userRole == UserRole.user) {
+      _busesStream = _databaseService.getActiveBuses().listen((buses) {
+        if (mounted) {
+          setState(() {
+            _activeBuses = buses;
+          });
+        }
+      });
+    }
   }
 
   Future<void> _checkLocationPermission() async {
@@ -229,7 +348,7 @@ class _MapScreenState extends State<MapScreen> {
         accuracy: LocationAccuracy.high,
         distanceFilter: 5,
       ),
-    ).listen((Position position) {
+    ).listen((Position position) async {
       if (mounted) {
         final newLocation = LatLng(position.latitude, position.longitude);
         setState(() {
@@ -241,6 +360,34 @@ class _MapScreenState extends State<MapScreen> {
           _mapController.move(newLocation, 17.0);
           _hasCenteredOnUser = true;
         }
+
+        // Update Firebase if driver is active
+        if (widget.userRole == UserRole.driver &&
+            _isRouteActive &&
+            widget.driverId != null) {
+          try {
+            // Extract route number from busId (BUSXXYY -> XX)
+            String routeName = 'Ruta ';
+            try {
+              final routePart = widget.driverId!.substring(3, 5);
+              routeName += int.parse(routePart).toString();
+            } catch (_) {
+              routeName += '?';
+            }
+
+            await _databaseService.updateBusLocation(
+              busId: widget.driverId!,
+              driverId: widget.driverId!,
+              routeName: routeName,
+              location: newLocation,
+              speed: position.speed * 3.6, // m/s to km/h
+              heading: position.heading,
+            );
+          } catch (e) {
+            // Silently fail - don't interrupt the UI
+            debugPrint('Error updating bus location: $e');
+          }
+        }
       }
     });
   }
@@ -248,6 +395,15 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
+    _busesStream?.cancel();
+
+    // Set bus as inactive when driver closes the app
+    if (widget.userRole == UserRole.driver &&
+        _isRouteActive &&
+        widget.driverId != null) {
+      _databaseService.setBusInactive(widget.driverId!);
+    }
+
     super.dispose();
   }
 

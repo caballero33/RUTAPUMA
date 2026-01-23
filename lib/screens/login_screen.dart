@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../constants/colors.dart';
 import '../models/user_role.dart';
 import '../providers/theme_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import 'map_screen.dart';
@@ -46,53 +47,107 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _handleLogin() {
+  void _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      if (_selectedRole == UserRole.driver) {
-        // Driver Authentication Logic
-        bool authenticated = false;
-        // Check 14 routes, 2 IDs each
-        for (int r = 1; r <= 14; r++) {
-          final rStr = r.toString().padLeft(2, '0');
-          for (int i = 1; i <= 2; i++) {
-            final iStr = i.toString().padLeft(2, '0');
-            final id = 'BUS$rStr$iStr';
-            final key = 'ruta$rStr$iStr';
-            if (email.toUpperCase() == id && password == key) {
-              authenticated = true;
-              break;
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      try {
+        if (_selectedRole == UserRole.driver) {
+          // Driver Authentication Logic - Keep hardcoded for now
+          bool authenticated = false;
+          // Check 14 routes, 2 IDs each
+          for (int r = 1; r <= 14; r++) {
+            final rStr = r.toString().padLeft(2, '0');
+            for (int i = 1; i <= 2; i++) {
+              final iStr = i.toString().padLeft(2, '0');
+              final id = 'BUS$rStr$iStr';
+              final key = 'ruta$rStr$iStr';
+              if (email.toUpperCase() == id && password == key) {
+                authenticated = true;
+                break;
+              }
             }
+            if (authenticated) break;
           }
-          if (authenticated) break;
+
+          // Close loading dialog
+          if (mounted) Navigator.of(context).pop();
+
+          if (!authenticated) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('ID o Llave del bus incorrecta'),
+                  backgroundColor: AppColors.red,
+                ),
+              );
+            }
+            return;
+          }
+        } else {
+          // User Authentication with Firebase
+          final authProvider = Provider.of<AuthProvider>(
+            context,
+            listen: false,
+          );
+          final success = await authProvider.signIn(email, password);
+
+          // Close loading dialog
+          if (mounted) Navigator.of(context).pop();
+
+          if (!success) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    authProvider.errorMessage ??
+                        'Error al iniciar sesión. Verifica tus credenciales.',
+                  ),
+                  backgroundColor: AppColors.red,
+                ),
+              );
+            }
+            return;
+          }
         }
 
-        if (!authenticated) {
+        // Navigate to map screen
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => MapScreen(
+                    userRole: _selectedRole,
+                    driverId:
+                        _selectedRole == UserRole.driver
+                            ? email.toUpperCase()
+                            : null,
+                  ),
+            ),
+          );
+        }
+      } catch (e) {
+        // Close loading dialog if still open
+        if (mounted) Navigator.of(context).pop();
+
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('ID o Llave del bus incorrecta'),
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
               backgroundColor: AppColors.red,
             ),
           );
-          return;
         }
       }
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder:
-              (context) => MapScreen(
-                userRole: _selectedRole,
-                driverId:
-                    _selectedRole == UserRole.driver
-                        ? email.toUpperCase()
-                        : null,
-              ),
-        ),
-      );
     }
   }
 

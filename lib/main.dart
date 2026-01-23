@@ -4,9 +4,19 @@ import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
 import 'constants/colors.dart';
 import 'providers/theme_provider.dart';
+import 'providers/auth_provider.dart';
+import 'services/firebase_service.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await FirebaseService.initialize();
+
+  // Initialize notifications
+  final notificationService = NotificationService();
+  await notificationService.initialize();
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -18,7 +28,10 @@ void main() {
 
   runApp(
     MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => ThemeProvider())],
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+      ],
       child: const RutaPumaApp(),
     ),
   );
