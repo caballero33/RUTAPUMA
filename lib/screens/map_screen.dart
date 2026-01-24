@@ -18,6 +18,7 @@ import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'my_route_screen.dart';
 import 'send_message_screen.dart';
+import 'settings_screen.dart';
 import 'help_screen.dart';
 
 class MapScreen extends StatefulWidget {
@@ -1023,7 +1024,6 @@ class _MapScreenState extends State<MapScreen> {
                   child: Column(
                     children: [
                       _buildMenuItem(Icons.home_rounded, 'Inicio'),
-                      _buildMenuItem(Icons.map_rounded, 'Mis Rutas'),
                       _buildMenuItem(Icons.star_rounded, 'Ruta Favorita'),
                       _buildMenuItem(Icons.notifications_rounded, 'Avisos'),
                       _buildMenuItem(Icons.settings_rounded, 'Configuración'),
@@ -1151,6 +1151,18 @@ class _MapScreenState extends State<MapScreen> {
               context,
               MaterialPageRoute(
                 builder: (context) => const SendMessageScreen(),
+              ),
+            );
+          });
+        }
+
+        if (title == 'Configuración') {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (!mounted) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SettingsScreen(userRole: widget.userRole),
               ),
             );
           });

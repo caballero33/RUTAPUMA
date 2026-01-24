@@ -75,17 +75,27 @@ class DatabaseService {
           try {
             final bus = BusModel.fromJson(busId, _convertMap(busData));
 
-            // Only include active buses updated in the last 5 minutes
+            // Calculate time difference
             final timeDiff = DateTime.now().difference(bus.timestamp);
             debugPrint(
               '   🚌 $busId - Activo: ${bus.isActive}, Tiempo: ${timeDiff.inMinutes} min',
             );
 
-            if (bus.isActive && timeDiff.inMinutes < 5) {
-              buses.add(bus);
-              debugPrint('      ✅ Bus agregado a la lista');
+            // Only include buses that are currently active
+            // Remove the strict time filter to allow buses to reappear after restart
+            if (bus.isActive) {
+              // Optional: Only filter out buses that haven't updated in a very long time (e.g., 1 hour)
+              // This prevents showing stale data from buses that crashed or lost connection
+              if (timeDiff.inHours < 1) {
+                buses.add(bus);
+                debugPrint('      ✅ Bus agregado a la lista');
+              } else {
+                debugPrint(
+                  '      ⚠️ Bus muy antiguo (${timeDiff.inHours} horas)',
+                );
+              }
             } else {
-              debugPrint('      ❌ Bus filtrado (inactivo o muy antiguo)');
+              debugPrint('      ❌ Bus inactivo');
             }
           } catch (e) {
             debugPrint('   ❌ Error parseando bus $busId: $e');
