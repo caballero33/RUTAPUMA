@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
+import 'screens/map_screen.dart';
 import 'constants/colors.dart';
+import 'models/user_role.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 import 'services/firebase_service.dart';
 import 'services/notification_service.dart';
+import 'services/route_monitor_service.dart';
+import 'services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +21,10 @@ void main() async {
   // Initialize notifications
   final notificationService = NotificationService();
   await notificationService.initialize();
+
+  // Initialize route monitoring service
+  final routeMonitor = RouteMonitorService();
+  await routeMonitor.initialize();
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -62,8 +70,7 @@ class RutaPumaApp extends StatelessWidget {
           themeMode: themeProvider.themeMode,
           theme: _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),
-          home:
-              LoginScreen(), // Removed const to ensure rebuild on theme change
+          home: const AuthChecker(), // Check for existing session
         );
       },
     );
@@ -143,5 +150,53 @@ class RutaPumaApp extends StatelessWidget {
       ),
       useMaterial3: true,
     );
+  }
+}
+
+// AuthChecker widget to handle auto-login
+class AuthChecker extends StatefulWidget {
+  const AuthChecker({super.key});
+
+  @override
+  State<AuthChecker> createState() => _AuthCheckerState();
+}
+
+class _AuthCheckerState extends State<AuthChecker> {
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final storageService = StorageService();
+    final session = await storageService.getSession();
+
+    if (!mounted) return;
+
+    if (session != null) {
+      // User has active session, navigate to MapScreen
+      final role = session['role'] as UserRole;
+      final driverId = session['driverId'] as String?;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MapScreen(userRole: role, driverId: driverId),
+        ),
+      );
+    } else {
+      // No session, navigate to LoginScreen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Show loading indicator while checking session
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

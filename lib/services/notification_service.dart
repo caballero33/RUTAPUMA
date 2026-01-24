@@ -1,8 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'database_service.dart';
 
 class NotificationService {
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  final DatabaseService _databaseService = DatabaseService();
   String? _fcmToken;
 
   String? get fcmToken => _fcmToken;
@@ -25,10 +28,15 @@ class NotificationService {
         _fcmToken = await _messaging.getToken();
         debugPrint('FCM Token: $_fcmToken');
 
+        // Save token to Firebase if user is logged in
+        await _saveFcmTokenToFirebase(_fcmToken);
+
         // Listen to token refresh
-        _messaging.onTokenRefresh.listen((newToken) {
+        _messaging.onTokenRefresh.listen((newToken) async {
           _fcmToken = newToken;
           debugPrint('FCM Token refreshed: $newToken');
+          // Save refreshed token to Firebase
+          await _saveFcmTokenToFirebase(newToken);
         });
 
         // Handle foreground messages
@@ -85,6 +93,28 @@ class NotificationService {
     } catch (e) {
       debugPrint('Error unsubscribing from topic: ${e.toString()}');
     }
+  }
+
+  // Save FCM token to Firebase
+  Future<void> _saveFcmTokenToFirebase(String? token) async {
+    if (token == null) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await _databaseService.updateFcmToken(user.uid, token);
+        debugPrint('✅ FCM token saved to Firebase for user: ${user.uid}');
+      } catch (e) {
+        debugPrint('❌ Error saving FCM token to Firebase: $e');
+      }
+    } else {
+      debugPrint('⚠️ No user logged in, FCM token not saved to Firebase');
+    }
+  }
+
+  // Force save current token (useful after login)
+  Future<void> saveFcmToken() async {
+    await _saveFcmTokenToFirebase(_fcmToken);
   }
 }
 

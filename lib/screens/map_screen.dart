@@ -10,6 +10,10 @@ import '../models/user_role.dart';
 import '../models/bus_model.dart';
 import '../providers/theme_provider.dart';
 import '../services/database_service.dart';
+import '../services/storage_service.dart';
+import '../services/location_service.dart';
+import '../services/route_monitor_service.dart';
+import '../services/favorite_routes_service.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
 import 'my_route_screen.dart';
@@ -32,6 +36,16 @@ class _MapScreenState extends State<MapScreen> {
 
   // Firebase Database Service
   final DatabaseService _databaseService = DatabaseService();
+
+  // Storage Service for session management
+  final StorageService _storageService = StorageService();
+
+  // Location Service for driver tracking
+  final LocationService _locationService = LocationService();
+
+  // Route Monitor Service for favorite routes notifications
+  final RouteMonitorService _routeMonitor = RouteMonitorService();
+  final FavoriteRoutesService _favoritesService = FavoriteRoutesService();
 
   // Initial Position: UNAH Campus Cortés (UNAH-VS)
   static const LatLng _unahVsLocation = LatLng(15.52974, -88.03742);
@@ -319,6 +333,11 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _checkLocationPermission();
 
+    // Start monitoring favorite routes for students
+    if (widget.userRole == UserRole.user) {
+      _startFavoriteRoutesMonitoring();
+    }
+
     // Listen to active buses from Firebase (for users only)
     if (widget.userRole == UserRole.user) {
       debugPrint(
@@ -352,6 +371,21 @@ class _MapScreenState extends State<MapScreen> {
 
     if (status.isGranted) {
       _startLocationTracking();
+    }
+  }
+
+  // Start monitoring favorite routes for notifications
+  Future<void> _startFavoriteRoutesMonitoring() async {
+    try {
+      final favorites = await _favoritesService.getFavoriteRoutes();
+      if (favorites.isNotEmpty) {
+        await _routeMonitor.startMonitoring();
+        debugPrint('✅ Monitoring ${favorites.length} favorite routes');
+      } else {
+        debugPrint('ℹ️ No favorite routes to monitor');
+      }
+    } catch (e) {
+      debugPrint('❌ Error starting route monitoring: $e');
     }
   }
 
@@ -717,8 +751,47 @@ class _MapScreenState extends State<MapScreen> {
                   onTap:
                       _isRouteActive
                           ? null
-                          : () {
+                          : () async {
                             debugPrint('🟢 Botón INICIAR presionado');
+
+                            // Start location service for driver
+                            if (widget.driverId != null) {
+                              try {
+                                // Extract route name from driver ID
+                                String routeName = 'Ruta ';
+                                try {
+                                  final routePart = widget.driverId!.substring(
+                                    3,
+                                    5,
+                                  );
+                                  routeName += int.parse(routePart).toString();
+                                } catch (_) {
+                                  routeName += '?';
+                                }
+
+                                await _locationService.startTracking(
+                                  driverId: widget.driverId!,
+                                  routeName: routeName,
+                                );
+                                debugPrint('✅ Location service started');
+                              } catch (e) {
+                                debugPrint(
+                                  '❌ Error starting location service: $e',
+                                );
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Error al iniciar rastreo: $e',
+                                      ),
+                                      backgroundColor: AppColors.red,
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+                            }
+
                             setState(() => _isRouteActive = true);
                             debugPrint(
                               '✅ Estado cambiado: _isRouteActive = $_isRouteActive',
@@ -751,7 +824,17 @@ class _MapScreenState extends State<MapScreen> {
                   onTap:
                       !_isRouteActive
                           ? null
-                          : () {
+                          : () async {
+                            // Stop location service
+                            try {
+                              await _locationService.stopTracking();
+                              debugPrint('✅ Location service stopped');
+                            } catch (e) {
+                              debugPrint(
+                                '❌ Error stopping location service: $e',
+                              );
+                            }
+
                             setState(() => _isRouteActive = false);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -954,14 +1037,29 @@ class _MapScreenState extends State<MapScreen> {
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: TextButton.icon(
-                  onPressed: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
-                      ),
-                      (route) => false,
-                    );
+                  onPressed: () async {
+                    // Stop location tracking if driver
+                    if (widget.userRole == UserRole.driver) {
+                      try {
+                        await _locationService.stopTracking();
+                      } catch (e) {
+                        debugPrint('Error stopping location service: $e');
+                      }
+                    }
+
+                    // Clear session storage
+                    await _storageService.clearSession();
+
+                    // Navigate to login screen
+                    if (mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                        (route) => false,
+                      );
+                    }
                   },
                   icon: const Icon(Icons.logout_rounded, color: AppColors.red),
                   label: const Text(

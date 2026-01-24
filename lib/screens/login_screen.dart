@@ -4,6 +4,7 @@ import '../constants/colors.dart';
 import '../models/user_role.dart';
 import '../providers/theme_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/storage_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import 'map_screen.dart';
@@ -92,6 +93,14 @@ class _LoginScreenState extends State<LoginScreen>
             }
             return;
           }
+
+          // Save driver session for persistent login
+          final storageService = StorageService();
+          await storageService.saveSession(
+            email: email.toUpperCase(),
+            role: UserRole.driver,
+            driverId: email.toUpperCase(),
+          );
         } else {
           // User Authentication with Firebase
           final authProvider = Provider.of<AuthProvider>(
@@ -200,30 +209,13 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     const SizedBox(height: 20),
 
-                    // Welcome Text
-                    Text(
-                      'Bienvenido a RutaPuma',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.white,
-                        shadows: [
-                          Shadow(
-                            color: AppColors.black.withOpacity(0.2),
-                            offset: const Offset(0, 2),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
+                    // Subtitle only
                     Text(
                       'Tu transporte universitario seguro',
                       style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.white.withOpacity(0.9),
-                        fontWeight: FontWeight.w500,
+                        fontSize: 18,
+                        color: AppColors.white.withOpacity(0.95),
+                        fontWeight: FontWeight.w600,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -273,7 +265,7 @@ class _LoginScreenState extends State<LoginScreen>
                               hint:
                                   _selectedRole == UserRole.driver
                                       ? '********'
-                                      : 'estudiante@unah.hn',
+                                      : 'estudiante@unah.hn o @unah.edu.hn',
                               prefixIcon:
                                   _selectedRole == UserRole.driver
                                       ? Icons.numbers_rounded
@@ -287,9 +279,16 @@ class _LoginScreenState extends State<LoginScreen>
                                 if (value == null || value.isEmpty)
                                   return 'Requerido';
 
-                                if (_selectedRole == UserRole.user &&
-                                    !value.contains('@')) {
-                                  return 'Correo inválido';
+                                if (_selectedRole == UserRole.user) {
+                                  if (!value.contains('@')) {
+                                    return 'Correo inválido';
+                                  }
+                                  // Validate UNAH email domain
+                                  final email = value.toLowerCase().trim();
+                                  if (!email.endsWith('@unah.hn') &&
+                                      !email.endsWith('@unah.edu.hn')) {
+                                    return 'Debe usar correo institucional\n(@unah.hn o @unah.edu.hn)';
+                                  }
                                 }
                                 return null;
                               },
@@ -313,79 +312,88 @@ class _LoginScreenState extends State<LoginScreen>
                               },
                             ),
 
-                            // Remember & Forgot Row
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        height: 24,
-                                        width: 24,
-                                        child: Checkbox(
-                                          value: true,
-                                          onChanged: (v) {},
-                                          activeColor:
-                                              isDark
-                                                  ? AppColors.primaryYellow
-                                                  : AppColors.primaryBlue,
-                                          side: BorderSide(
-                                            color:
-                                                isDark
-                                                    ? AppColors.white
-                                                        .withOpacity(0.5)
-                                                    : AppColors.grey,
-                                            width: 1.5,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                          ),
-                                        ),
+                            // Forgot Password (for users only)
+                            if (_selectedRole == UserRole.user)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) =>
+                                                const ForgotPasswordScreen(),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Recordarme',
-                                        style: TextStyle(
-                                          color:
-                                              isDark
-                                                  ? AppColors.white.withOpacity(
-                                                    0.7,
-                                                  )
-                                                  : AppColors.darkGrey,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
+                                    );
+                                  },
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 0,
+                                      vertical: 8,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
-                                  if (_selectedRole == UserRole.user)
-                                    TextButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder:
-                                                (context) =>
-                                                    const ForgotPasswordScreen(),
-                                          ),
-                                        );
-                                      },
-                                      child: Text(
-                                        '¿Olvidaste contraseña?',
-                                        style: TextStyle(
-                                          color:
-                                              isDark
-                                                  ? AppColors.primaryYellow
-                                                  : AppColors.primaryBlue,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                                  child: Text(
+                                    '¿Olvidaste contraseña?',
+                                    style: TextStyle(
+                                      color:
+                                          isDark
+                                              ? AppColors.primaryYellow
+                                              : AppColors.primaryBlue,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                            // Remember Me
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: 4,
+                                bottom: 12,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: Checkbox(
+                                      value: true,
+                                      onChanged: (v) {},
+                                      activeColor:
+                                          isDark
+                                              ? AppColors.primaryYellow
+                                              : AppColors.primaryBlue,
+                                      side: BorderSide(
+                                        color:
+                                            isDark
+                                                ? AppColors.white.withOpacity(
+                                                  0.5,
+                                                )
+                                                : AppColors.grey,
+                                        width: 1.5,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(4),
                                       ),
                                     ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Recordarme',
+                                    style: TextStyle(
+                                      color:
+                                          isDark
+                                              ? AppColors.white.withOpacity(0.7)
+                                              : AppColors.darkGrey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -408,11 +416,10 @@ class _LoginScreenState extends State<LoginScreen>
                             const SizedBox(height: 20),
 
                             if (_selectedRole == UserRole.user)
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              Column(
                                 children: [
                                   Text(
-                                    '¿No tienes cuenta? ',
+                                    '¿No tienes cuenta?',
                                     style: TextStyle(
                                       color:
                                           isDark
@@ -421,6 +428,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       fontSize: 13,
                                     ),
                                   ),
+                                  const SizedBox(height: 8),
                                   GestureDetector(
                                     onTap: () {
                                       Navigator.push(
@@ -439,7 +447,7 @@ class _LoginScreenState extends State<LoginScreen>
                                             AppColors
                                                 .primaryYellow, // Accent color
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 13,
+                                        fontSize: 14,
                                       ),
                                     ),
                                   ),

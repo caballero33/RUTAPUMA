@@ -177,4 +177,141 @@ class DatabaseService {
       throw Exception('Error al obtener rutas: ${e.toString()}');
     }
   }
+
+  // ==================== FAVORITE ROUTES METHODS ====================
+
+  /// Save a favorite route for a user
+  Future<void> saveFavoriteRoute(String userId, String routeName) async {
+    try {
+      await _database
+          .child('users')
+          .child(userId)
+          .child('favoriteRoutes')
+          .child(routeName)
+          .set(true);
+      debugPrint('✅ Saved favorite route: $routeName for user: $userId');
+    } catch (e) {
+      debugPrint('❌ Error saving favorite route: $e');
+      throw Exception('Error al guardar ruta favorita: ${e.toString()}');
+    }
+  }
+
+  /// Remove a favorite route for a user
+  Future<void> removeFavoriteRoute(String userId, String routeName) async {
+    try {
+      await _database
+          .child('users')
+          .child(userId)
+          .child('favoriteRoutes')
+          .child(routeName)
+          .remove();
+      debugPrint('✅ Removed favorite route: $routeName for user: $userId');
+    } catch (e) {
+      debugPrint('❌ Error removing favorite route: $e');
+      throw Exception('Error al eliminar ruta favorita: ${e.toString()}');
+    }
+  }
+
+  /// Get all favorite routes for a user from Firebase
+  Future<List<String>> getFavoriteRoutesFromFirebase(String userId) async {
+    try {
+      final snapshot =
+          await _database
+              .child('users')
+              .child(userId)
+              .child('favoriteRoutes')
+              .get();
+
+      if (!snapshot.exists) {
+        return [];
+      }
+
+      final data = _convertMap(snapshot.value);
+      final List<String> favoriteRoutes = [];
+
+      data.forEach((routeName, isFavorite) {
+        if (isFavorite == true) {
+          favoriteRoutes.add(routeName.toString());
+        }
+      });
+
+      debugPrint(
+        '✅ Loaded ${favoriteRoutes.length} favorite routes for user: $userId',
+      );
+      return favoriteRoutes;
+    } catch (e) {
+      debugPrint('❌ Error getting favorite routes: $e');
+      return [];
+    }
+  }
+
+  /// Listen to favorite routes changes in real-time
+  Stream<List<String>> watchFavoriteRoutes(String userId) {
+    return _database
+        .child('users')
+        .child(userId)
+        .child('favoriteRoutes')
+        .onValue
+        .map((event) {
+          if (!event.snapshot.exists) {
+            return <String>[];
+          }
+
+          final data = _convertMap(event.snapshot.value);
+          final List<String> favoriteRoutes = [];
+
+          data.forEach((routeName, isFavorite) {
+            if (isFavorite == true) {
+              favoriteRoutes.add(routeName.toString());
+            }
+          });
+
+          return favoriteRoutes;
+        });
+  }
+
+  // ==================== FCM TOKEN METHODS ====================
+
+  /// Update FCM token for a user
+  Future<void> updateFcmToken(String userId, String fcmToken) async {
+    try {
+      await _database
+          .child('users')
+          .child(userId)
+          .child('fcmToken')
+          .set(fcmToken);
+      debugPrint('✅ Updated FCM token for user: $userId');
+    } catch (e) {
+      debugPrint('❌ Error updating FCM token: $e');
+      throw Exception('Error al actualizar token FCM: ${e.toString()}');
+    }
+  }
+
+  /// Save user profile data (for registration)
+  Future<void> saveUserProfile({
+    required String userId,
+    required String email,
+    required String name,
+    required String role,
+    String? fcmToken,
+  }) async {
+    try {
+      final userData = {
+        'email': email,
+        'name': name,
+        'role': role,
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      if (fcmToken != null) {
+        userData['fcmToken'] = fcmToken;
+      }
+
+      await _database.child('users').child(userId).set(userData);
+      debugPrint('✅ Saved user profile for: $userId');
+    } catch (e) {
+      debugPrint('❌ Error saving user profile: $e');
+      throw Exception('Error al guardar perfil de usuario: ${e.toString()}');
+    }
+  }
 }

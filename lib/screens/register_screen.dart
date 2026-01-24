@@ -239,7 +239,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                             // Email Field
                             CustomTextField(
                               label: 'Correo Institucional',
-                              hint: 'estudiante@unah.hn',
+                              hint: 'estudiante@unah.hn o @unah.edu.hn',
                               prefixIcon: Icons.email_rounded,
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
@@ -248,6 +248,13 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   return 'Requerido';
                                 if (!value.contains('@'))
                                   return 'Correo inválido';
+
+                                // Validate UNAH email domain
+                                final email = value.toLowerCase().trim();
+                                if (!email.endsWith('@unah.hn') &&
+                                    !email.endsWith('@unah.edu.hn')) {
+                                  return 'Debe usar correo institucional\n(@unah.hn o @unah.edu.hn)';
+                                }
                                 return null;
                               },
                             ),

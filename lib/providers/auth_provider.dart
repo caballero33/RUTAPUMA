@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
+import '../models/user_role.dart';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final StorageService _storageService = StorageService();
   UserModel? _currentUser;
   bool _isLoading = false;
   String? _errorMessage;
@@ -41,6 +44,16 @@ class AuthProvider extends ChangeNotifier {
         email,
         password,
       );
+
+      // Save session for persistent login
+      if (_currentUser != null) {
+        await _storageService.saveSession(
+          email: email,
+          role: _currentUser!.role == 'USER' ? UserRole.user : UserRole.driver,
+          userId: _currentUser!.uid,
+        );
+      }
+
       _isLoading = false;
       notifyListeners();
       return _currentUser != null;
@@ -70,6 +83,10 @@ class AuthProvider extends ChangeNotifier {
         displayName: displayName,
         role: role,
       );
+
+      // Note: We don't auto-save session on registration
+      // User needs to login after registration
+
       _isLoading = false;
       notifyListeners();
       return _currentUser != null;
@@ -88,6 +105,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       await _authService.signOut();
+      await _storageService.clearSession(); // Clear saved session
       _currentUser = null;
       _isLoading = false;
       notifyListeners();
