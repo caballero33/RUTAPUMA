@@ -40,14 +40,33 @@ class BusModel {
 
   // Create BusModel from JSON
   factory BusModel.fromJson(String busId, Map<String, dynamic> json) {
-    final location = json['location'] as Map<String, dynamic>;
+    // Handle null or missing location data
+    final locationData = json['location'];
+
+    // If location is null or not a map, throw a more descriptive error
+    if (locationData == null || locationData is! Map) {
+      throw Exception('Bus $busId has invalid or missing location data');
+    }
+
+    final location = locationData as Map<String, dynamic>;
+
+    // Validate required fields
+    if (json['driverId'] == null ||
+        json['routeName'] == null ||
+        json['timestamp'] == null ||
+        json['isActive'] == null ||
+        location['latitude'] == null ||
+        location['longitude'] == null) {
+      throw Exception('Bus $busId is missing required fields');
+    }
+
     return BusModel(
       busId: busId,
       driverId: json['driverId'] as String,
       routeName: json['routeName'] as String,
       currentLocation: LatLng(
-        location['latitude'] as double,
-        location['longitude'] as double,
+        (location['latitude'] as num).toDouble(),
+        (location['longitude'] as num).toDouble(),
       ),
       timestamp: DateTime.parse(json['timestamp'] as String),
       isActive: json['isActive'] as bool,
