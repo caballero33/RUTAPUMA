@@ -59,6 +59,9 @@ class _MapScreenState extends State<MapScreen> {
   List<BusModel> _activeBuses = [];
   StreamSubscription<List<BusModel>>? _busesStream;
 
+  // Pause state for drivers
+  bool _isRoutePaused = false;
+
   // Markers
   List<Marker> get _allMarkers {
     final markers = <Marker>[
@@ -409,9 +412,10 @@ class _MapScreenState extends State<MapScreen> {
           _hasCenteredOnUser = true;
         }
 
-        // Update Firebase if driver is active
+        // Update Firebase if driver is active and NOT paused
         if (widget.userRole == UserRole.driver &&
             _isRouteActive &&
+            !_isRoutePaused &&
             widget.driverId != null) {
           try {
             // Extract route number from busId (BUSXXYY -> XX)
@@ -450,6 +454,7 @@ class _MapScreenState extends State<MapScreen> {
               '   - Es conductor: ${widget.userRole == UserRole.driver}',
             );
             debugPrint('   - Ruta activa: $_isRouteActive');
+            debugPrint('   - Ruta pausada: $_isRoutePaused');
             debugPrint('   - Tiene ID: ${widget.driverId != null}');
           }
         }
@@ -747,76 +752,156 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 _buildDriverButton(
                   icon: Icons.play_arrow_rounded,
-                  label: 'Iniciar',
-                  color: _isRouteActive ? AppColors.grey : AppColors.green,
+                  label: _isRoutePaused ? 'Reanudar' : 'Iniciar',
+                  color:
+                      (_isRouteActive && !_isRoutePaused)
+                          ? AppColors.grey
+                          : AppColors.green,
                   onTap:
-                      _isRouteActive
+                      (_isRouteActive && !_isRoutePaused)
                           ? null
                           : () async {
-                            debugPrint('🟢 Botón INICIAR presionado');
+                            if (_isRoutePaused) {
+                              // RESUME logic
+                              debugPrint('🟢 Botón REANUDAR presionado');
 
-                            // Start location service for driver
-                            if (widget.driverId != null) {
-                              try {
-                                // Extract route name from driver ID
-                                String routeName = 'Ruta ';
+                              setState(() => _isRoutePaused = false);
+
+                              // Update Firebase to set bus as active
+                              if (widget.driverId != null &&
+                                  _userLocation != null) {
                                 try {
-                                  final routePart = widget.driverId!.substring(
-                                    3,
-                                    5,
-                                  );
-                                  routeName += int.parse(routePart).toString();
-                                } catch (_) {
-                                  routeName += '?';
-                                }
+                                  String routeName = 'Ruta ';
+                                  try {
+                                    final routePart = widget.driverId!
+                                        .substring(3, 5);
+                                    routeName +=
+                                        int.parse(routePart).toString();
+                                  } catch (_) {
+                                    routeName += '?';
+                                  }
 
-                                await _locationService.startTracking(
-                                  driverId: widget.driverId!,
-                                  routeName: routeName,
-                                );
-                                debugPrint('✅ Location service started');
-                              } catch (e) {
-                                debugPrint(
-                                  '❌ Error starting location service: $e',
-                                );
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Error al iniciar rastreo: $e',
-                                      ),
-                                      backgroundColor: AppColors.red,
-                                    ),
+                                  await _databaseService.updateBusLocation(
+                                    busId: widget.driverId!,
+                                    driverId: widget.driverId!,
+                                    routeName: routeName,
+                                    location: _userLocation!,
+                                    speed: 0,
+                                    heading: 0,
                                   );
+                                  debugPrint('✅ Bus reactivado en Firebase');
+                                } catch (e) {
+                                  debugPrint('❌ Error reactivando bus: $e');
                                 }
-                                return;
+                              }
+
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('🟢 Ruta Reanudada'),
+                                    backgroundColor: AppColors.green,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            } else {
+                              // START logic
+                              debugPrint('🟢 Botón INICIAR presionado');
+
+                              // Start location service for driver
+                              if (widget.driverId != null) {
+                                try {
+                                  // Extract route name from driver ID
+                                  String routeName = 'Ruta ';
+                                  try {
+                                    final routePart = widget.driverId!
+                                        .substring(3, 5);
+                                    routeName +=
+                                        int.parse(routePart).toString();
+                                  } catch (_) {
+                                    routeName += '?';
+                                  }
+
+                                  await _locationService.startTracking(
+                                    driverId: widget.driverId!,
+                                    routeName: routeName,
+                                  );
+                                  debugPrint('✅ Location service started');
+                                } catch (e) {
+                                  debugPrint(
+                                    '❌ Error starting location service: $e',
+                                  );
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Error al iniciar rastreo: $e',
+                                        ),
+                                        backgroundColor: AppColors.red,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+                              }
+
+                              setState(() => _isRouteActive = true);
+                              debugPrint(
+                                '✅ Estado cambiado: _isRouteActive = $_isRouteActive',
+                              );
+
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Ruta Iniciada. ¡Buen viaje!',
+                                    ),
+                                    backgroundColor: AppColors.green,
+                                  ),
+                                );
                               }
                             }
-
-                            setState(() => _isRouteActive = true);
-                            debugPrint(
-                              '✅ Estado cambiado: _isRouteActive = $_isRouteActive',
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Ruta Iniciada. ¡Buen viaje!'),
-                                backgroundColor: AppColors.green,
-                              ),
-                            );
                           },
                 ),
                 _buildDriverButton(
                   icon: Icons.pause_rounded,
                   label: 'Pausar',
-                  color: AppColors.primaryYellow,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Ruta Pausada'),
-                        backgroundColor: AppColors.primaryYellow,
-                      ),
-                    );
-                  },
+                  color:
+                      (!_isRouteActive || _isRoutePaused)
+                          ? AppColors.grey
+                          : AppColors.primaryYellow,
+                  onTap:
+                      (!_isRouteActive || _isRoutePaused)
+                          ? null
+                          : () async {
+                            debugPrint('🟡 Botón PAUSAR presionado');
+
+                            setState(() => _isRoutePaused = true);
+
+                            // Set bus as inactive in Firebase (temporarily)
+                            if (widget.driverId != null) {
+                              try {
+                                await _databaseService.setBusInactive(
+                                  widget.driverId!,
+                                );
+                                debugPrint(
+                                  '✅ Bus marcado como inactivo en Firebase',
+                                );
+                              } catch (e) {
+                                debugPrint('❌ Error pausando bus: $e');
+                              }
+                            }
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('⏸️ Ruta Pausada'),
+                                  backgroundColor: AppColors.primaryYellow,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
                 ),
                 _buildDriverButton(
                   icon: Icons.stop_rounded,

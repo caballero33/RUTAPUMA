@@ -145,14 +145,17 @@ class _LoginScreenState extends State<LoginScreen>
           );
         }
       } catch (e) {
-        // Close loading dialog if still open
-        if (mounted) Navigator.of(context).pop();
+        // Close loading dialog if still open (use rootNavigator to ensure it closes)
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error: ${e.toString()}'),
               backgroundColor: AppColors.red,
+              duration: const Duration(seconds: 4),
             ),
           );
         }
@@ -349,54 +352,6 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                 ),
                               ),
-
-                            // Remember Me
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: 4,
-                                bottom: 12,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: Checkbox(
-                                      value: true,
-                                      onChanged: (v) {},
-                                      activeColor:
-                                          isDark
-                                              ? AppColors.primaryYellow
-                                              : AppColors.primaryBlue,
-                                      side: BorderSide(
-                                        color:
-                                            isDark
-                                                ? AppColors.white.withOpacity(
-                                                  0.5,
-                                                )
-                                                : AppColors.grey,
-                                        width: 1.5,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Recordarme',
-                                    style: TextStyle(
-                                      color:
-                                          isDark
-                                              ? AppColors.white.withOpacity(0.7)
-                                              : AppColors.darkGrey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
 
                             const SizedBox(height: 20),
 
