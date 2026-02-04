@@ -50,7 +50,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
             style: TextStyle(
               color:
                   isDark
-                      ? AppColors.white.withOpacity(0.8)
+                      ? AppColors.white.withValues(alpha: 0.8)
                       : AppColors.darkGrey,
               fontSize: 15,
               fontWeight: FontWeight.w800,
@@ -72,8 +72,8 @@ class _CustomTextFieldState extends State<CustomTextField> {
             hintStyle: TextStyle(
               color:
                   isDark
-                      ? AppColors.white.withOpacity(0.3)
-                      : AppColors.grey.withOpacity(0.8),
+                      ? AppColors.white.withValues(alpha: 0.3)
+                      : AppColors.grey.withValues(alpha: 0.8),
               fontWeight: FontWeight.w500,
             ),
             prefixIcon:
@@ -96,7 +96,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
                             : Icons.visibility_rounded,
                         color:
                             isDark
-                                ? AppColors.white.withOpacity(0.5)
+                                ? AppColors.white.withValues(alpha: 0.5)
                                 : AppColors.grey,
                       ),
                       onPressed: () {

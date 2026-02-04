@@ -170,7 +170,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                         color: AppColors.white,
                         shadows: [
                           Shadow(
-                            color: AppColors.black.withOpacity(0.2),
+                            color: AppColors.black.withValues(alpha: 0.2),
                             offset: const Offset(0, 2),
                             blurRadius: 4,
                           ),
@@ -183,7 +183,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                       'Crea tu cuenta universitaria',
                       style: TextStyle(
                         fontSize: 16,
-                        color: AppColors.white.withOpacity(0.9),
+                        color: AppColors.white.withValues(alpha: 0.9),
                         fontWeight: FontWeight.w500,
                       ),
                       textAlign: TextAlign.center,
@@ -208,8 +208,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 ? null
                                 : [
                                   BoxShadow(
-                                    color: AppColors.shadowColor.withOpacity(
-                                      0.2,
+                                    color: AppColors.shadowColor.withValues(
+                                      alpha: 0.2,
                                     ),
                                     blurRadius: 30,
                                     offset: const Offset(0, 15),
@@ -315,7 +315,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   style: TextStyle(
                                     color:
                                         isDark
-                                            ? AppColors.white.withOpacity(0.7)
+                                            ? AppColors.white.withValues(
+                                              alpha: 0.7,
+                                            )
                                             : AppColors.darkGrey,
                                     fontSize: 13,
                                   ),

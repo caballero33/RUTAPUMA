@@ -62,7 +62,7 @@ class HelpScreen extends StatelessWidget {
                 color:
                     isDark
                         ? AppColors.darkAccent
-                        : AppColors.primaryBlue.withOpacity(0.1),
+                        : AppColors.primaryBlue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -92,7 +92,7 @@ class HelpScreen extends StatelessWidget {
                 fontSize: 16,
                 color:
                     isDark
-                        ? AppColors.white.withOpacity(0.7)
+                        ? AppColors.white.withValues(alpha: 0.7)
                         : AppColors.darkGrey,
                 height: 1.5,
               ),
@@ -112,7 +112,7 @@ class HelpScreen extends StatelessWidget {
                         ? null
                         : [
                           BoxShadow(
-                            color: AppColors.shadowColor.withOpacity(0.1),
+                            color: AppColors.shadowColor.withValues(alpha: 0.1),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -126,7 +126,7 @@ class HelpScreen extends StatelessWidget {
                       fontSize: 14,
                       color:
                           isDark
-                              ? AppColors.white.withOpacity(0.5)
+                              ? AppColors.white.withValues(alpha: 0.5)
                               : AppColors.grey,
                       fontWeight: FontWeight.w600,
                     ),
@@ -177,7 +177,7 @@ class HelpScreen extends StatelessWidget {
                         backgroundColor:
                             isDark
                                 ? AppColors.darkAccent
-                                : AppColors.primaryBlue.withOpacity(0.1),
+                                : AppColors.primaryBlue.withValues(alpha: 0.1),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -197,7 +197,7 @@ class HelpScreen extends StatelessWidget {
                 color:
                     isDark
                         ? AppColors.darkBorder
-                        : AppColors.grey.withOpacity(0.5),
+                        : AppColors.grey.withValues(alpha: 0.5),
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),

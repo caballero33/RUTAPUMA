@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/colors.dart';
 
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+// import '../models/user_role.dart'; // Unused import
+
 class MyRouteScreen extends StatefulWidget {
   const MyRouteScreen({super.key});
 
@@ -19,6 +23,7 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
   // Set to store selected routes
   final Set<String> _selectedRoutes = {};
   bool _isLoading = true;
+  bool _isDriver = false;
 
   @override
   void initState() {
@@ -27,6 +32,53 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
   }
 
   Future<void> _loadSelectedRoutes() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // 1. Ensure we have a user - Recovery logic
+    if (authProvider.currentUser == null) {
+      debugPrint('⚠️ [MyRouteScreen] User is null, attempting checkSession...');
+      await authProvider.checkSession();
+    }
+
+    final user = authProvider.currentUser;
+    debugPrint('🔍 [MyRouteScreen] User: ${user?.uid}, Role: ${user?.role}');
+
+    // 2. Check if user is driver (Robust check)
+    // Accept 'DRIVER' or 'driver' or any case
+    if (user != null && user.role.toUpperCase() == 'DRIVER') {
+      debugPrint('✅ [MyRouteScreen] Driver detected!');
+      _isDriver = true;
+      // Clean assigned route name from user profile or ID
+      String? assignedRoute = user.assignedRoute;
+
+      // Fallback parsing (same logic as other screens)
+      if (assignedRoute == null && user.uid.startsWith('BUS')) {
+        try {
+          if (user.uid.length >= 5) {
+            final routeNum = int.parse(user.uid.substring(3, 5));
+            assignedRoute = 'Ruta $routeNum';
+          }
+        } catch (_) {}
+      }
+
+      if (assignedRoute != null) {
+        debugPrint('🔒 [MyRouteScreen] Locking route to: $assignedRoute');
+        if (mounted) {
+          setState(() {
+            _selectedRoutes.clear();
+            _selectedRoutes.add(assignedRoute!);
+            _isLoading = false;
+            _isDriver = true; // Ensure state is updated visually
+          });
+        }
+        // Also force save to persist for other screens
+        _saveSelectedRoutes();
+        return;
+      }
+    } else {
+      debugPrint('👤 [MyRouteScreen] Normal user or unknown role');
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final List<String>? savedRoutes = prefs.getStringList('favorite_routes');
     if (savedRoutes != null) {
@@ -45,6 +97,16 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
   }
 
   void _toggleRoute(String route) {
+    // Prevent drivers from changing selection
+    if (_isDriver) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🔒 Tu ruta está asignada automáticamente.'),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       if (_selectedRoutes.contains(route)) {
         _selectedRoutes.remove(route);
@@ -56,6 +118,8 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
   }
 
   void _toggleAll(bool? value) {
+    if (_isDriver) return; // Disable for drivers
+
     setState(() {
       if (value == true) {
         _selectedRoutes.addAll(_allRoutes);
@@ -111,32 +175,46 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color:
-                          isDark
-                              ? AppColors.darkAccent
-                              : AppColors.primaryBlue.withOpacity(0.1),
+                          _isDriver
+                              ? (isDark
+                                  ? AppColors.darkAccent
+                                  : Colors.orange.withValues(alpha: 0.1))
+                              : (isDark
+                                  ? AppColors.darkAccent
+                                  : AppColors.primaryBlue.withValues(
+                                    alpha: 0.1,
+                                  )),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color:
-                            isDark
-                                ? AppColors.primaryYellow
-                                : AppColors.primaryBlue,
+                            _isDriver
+                                ? Colors.orange
+                                : (isDark
+                                    ? AppColors.primaryYellow
+                                    : AppColors.primaryBlue),
                         width: 1,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          Icons.info_outline_rounded,
+                          _isDriver
+                              ? Icons.lock_clock_rounded
+                              : Icons.info_outline_rounded,
                           color:
-                              isDark
-                                  ? AppColors.primaryYellow
-                                  : AppColors.primaryBlue,
+                              _isDriver
+                                  ? Colors.orange
+                                  : (isDark
+                                      ? AppColors.primaryYellow
+                                      : AppColors.primaryBlue),
                           size: 24,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'La ruta que elijas recibirá notificaciones acerca de ella en avisos.',
+                            _isDriver
+                                ? 'Tu ruta está fijada por tu unidad asignada.'
+                                : 'La ruta que elijas recibirá notificaciones acerca de ella en avisos.',
                             style: TextStyle(
                               color:
                                   isDark ? AppColors.white : AppColors.darkBlue,
@@ -149,49 +227,56 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
                     ),
                   ),
 
-                  // Select All Checkbox
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: Checkbox(
-                            value: areAllSelected,
-                            onChanged: _toggleAll,
-                            activeColor:
-                                isDark
-                                    ? AppColors.primaryYellow
-                                    : AppColors.primaryBlue,
-                            side: BorderSide(
+                  // Select All Checkbox - HIDDEN FOR DRIVERS
+                  if (!_isDriver)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: Checkbox(
+                              value: areAllSelected,
+                              onChanged: _toggleAll,
+                              fillColor: WidgetStateProperty.resolveWith((
+                                states,
+                              ) {
+                                if (states.contains(WidgetState.selected)) {
+                                  return isDark
+                                      ? AppColors.primaryYellow
+                                      : AppColors.primaryBlue;
+                                }
+                                return null;
+                              }),
+                              side: BorderSide(
+                                color:
+                                    isDark
+                                        ? AppColors.white.withValues(alpha: 0.5)
+                                        : AppColors.grey,
+                                width: 1.5,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Seleccionar todas',
+                            style: TextStyle(
                               color:
-                                  isDark
-                                      ? AppColors.white.withOpacity(0.5)
-                                      : AppColors.grey,
-                              width: 1.5,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
+                                  isDark ? AppColors.white : AppColors.darkBlue,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Seleccionar todas',
-                          style: TextStyle(
-                            color:
-                                isDark ? AppColors.white : AppColors.darkBlue,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
                   const Divider(height: 1),
 
@@ -204,81 +289,98 @@ class _MyRouteScreenState extends State<MyRouteScreen> {
                         final route = _allRoutes[index];
                         final isSelected = _selectedRoutes.contains(route);
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color:
-                                isDark
-                                    ? AppColors.darkSurface
-                                    : AppColors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border:
-                                isDark
-                                    ? Border.all(color: AppColors.darkBorder)
-                                    : null,
-                            boxShadow:
-                                isDark
-                                    ? null
-                                    : [
-                                      BoxShadow(
-                                        color: AppColors.shadowColor
-                                            .withOpacity(0.1),
-                                        blurRadius: 5,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
+                        // Interaction logic for List Tile
+                        final isInteractive = !_isDriver;
+
+                        return Opacity(
+                          // Dim unselected items for drivers
+                          opacity: (_isDriver && !isSelected) ? 0.5 : 1.0,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            decoration: BoxDecoration(
+                              color:
+                                  isDark
+                                      ? AppColors.darkSurface
+                                      : AppColors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border:
+                                  isDark
+                                      ? Border.all(color: AppColors.darkBorder)
+                                      : null,
+                              boxShadow:
+                                  isDark
+                                      ? null
+                                      : [
+                                        BoxShadow(
+                                          color: AppColors.shadowColor
+                                              .withValues(alpha: 0.1),
+                                          blurRadius: 5,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                             ),
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color:
-                                    isDark
-                                        ? AppColors.darkAccent
-                                        : AppColors.lightGrey,
-                                shape: BoxShape.circle,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
                               ),
-                              child: Icon(
-                                Icons.directions_bus_rounded,
-                                color:
-                                    isDark
-                                        ? AppColors.primaryYellow
-                                        : AppColors.primaryBlue,
-                                size: 20,
+                              leading: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color:
+                                      isDark
+                                          ? AppColors.darkAccent
+                                          : AppColors.lightGrey,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.directions_bus_rounded,
+                                  color:
+                                      isDark
+                                          ? AppColors.primaryYellow
+                                          : AppColors.primaryBlue,
+                                  size: 20,
+                                ),
                               ),
+                              title: Text(
+                                route,
+                                style: TextStyle(
+                                  color:
+                                      isDark
+                                          ? AppColors.white
+                                          : AppColors.darkGrey,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: Icon(
+                                  isSelected
+                                      ? Icons.favorite_rounded
+                                      : (_isDriver
+                                          ? Icons.lock_outline
+                                          : Icons.favorite_border_rounded),
+                                  color:
+                                      isSelected
+                                          ? (isDark
+                                              ? AppColors.primaryYellow
+                                              : AppColors.red)
+                                          : (isDark
+                                              ? AppColors.white.withValues(
+                                                alpha: 0.5,
+                                              )
+                                              : AppColors.grey),
+                                  size: 28,
+                                ),
+                                onPressed:
+                                    isInteractive
+                                        ? () => _toggleRoute(route)
+                                        : null,
+                              ),
+                              onTap:
+                                  isInteractive
+                                      ? () => _toggleRoute(route)
+                                      : null,
                             ),
-                            title: Text(
-                              route,
-                              style: TextStyle(
-                                color:
-                                    isDark
-                                        ? AppColors.white
-                                        : AppColors.darkGrey,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            trailing: IconButton(
-                              icon: Icon(
-                                isSelected
-                                    ? Icons.favorite_rounded
-                                    : Icons.favorite_border_rounded,
-                                color:
-                                    isSelected
-                                        ? (isDark
-                                            ? AppColors.primaryYellow
-                                            : AppColors.red)
-                                        : (isDark
-                                            ? AppColors.white.withOpacity(0.5)
-                                            : AppColors.grey),
-                                size: 28,
-                              ),
-                              onPressed: () => _toggleRoute(route),
-                            ),
-                            onTap: () => _toggleRoute(route),
                           ),
                         );
                       },

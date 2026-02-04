@@ -4,7 +4,6 @@ import '../constants/colors.dart';
 import '../models/user_role.dart';
 import '../providers/theme_provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/storage_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
 import 'map_screen.dart';
@@ -61,71 +60,34 @@ class _LoginScreenState extends State<LoginScreen>
       );
 
       try {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+        bool success = false;
+
         if (_selectedRole == UserRole.driver) {
-          // Driver Authentication Logic - Keep hardcoded for now
-          bool authenticated = false;
-          // Check 14 routes, 2 IDs each
-          for (int r = 1; r <= 14; r++) {
-            final rStr = r.toString().padLeft(2, '0');
-            for (int i = 1; i <= 2; i++) {
-              final iStr = i.toString().padLeft(2, '0');
-              final id = 'BUS$rStr$iStr';
-              final key = 'ruta$rStr$iStr';
-              if (email.toUpperCase() == id && password == key) {
-                authenticated = true;
-                break;
-              }
-            }
-            if (authenticated) break;
-          }
-
-          // Close loading dialog
-          if (mounted) Navigator.of(context).pop();
-
-          if (!authenticated) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('ID o Llave del bus incorrecta'),
-                  backgroundColor: AppColors.red,
-                ),
-              );
-            }
-            return;
-          }
-
-          // Save driver session for persistent login
-          final storageService = StorageService();
-          await storageService.saveSession(
-            email: email.toUpperCase(),
-            role: UserRole.driver,
-            driverId: email.toUpperCase(),
-          );
+          // Driver Authentication via Provider
+          success = await authProvider.loginDriver(email, password);
         } else {
-          // User Authentication with Firebase
-          final authProvider = Provider.of<AuthProvider>(
-            context,
-            listen: false,
-          );
-          final success = await authProvider.signIn(email, password);
+          // User Authentication via Provider
+          success = await authProvider.signIn(email, password);
+        }
 
-          // Close loading dialog
-          if (mounted) Navigator.of(context).pop();
+        // Close loading dialog
+        if (mounted) Navigator.of(context).pop();
 
-          if (!success) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    authProvider.errorMessage ??
-                        'Error al iniciar sesión. Verifica tus credenciales.',
-                  ),
-                  backgroundColor: AppColors.red,
+        if (!success) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  authProvider.errorMessage ??
+                      'Error al iniciar sesión. Verifica tus credenciales.',
                 ),
-              );
-            }
-            return;
+                backgroundColor: AppColors.red,
+              ),
+            );
           }
+          return;
         }
 
         // Navigate to map screen
@@ -217,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen>
                       'Tu transporte universitario seguro',
                       style: TextStyle(
                         fontSize: 18,
-                        color: AppColors.white.withOpacity(0.95),
+                        color: AppColors.white.withValues(alpha: 0.95),
                         fontWeight: FontWeight.w600,
                       ),
                       textAlign: TextAlign.center,
@@ -242,8 +204,8 @@ class _LoginScreenState extends State<LoginScreen>
                                 ? null
                                 : [
                                   BoxShadow(
-                                    color: AppColors.shadowColor.withOpacity(
-                                      0.2,
+                                    color: AppColors.shadowColor.withValues(
+                                      alpha: 0.2,
                                     ),
                                     blurRadius: 30,
                                     offset: const Offset(0, 15),
@@ -378,7 +340,9 @@ class _LoginScreenState extends State<LoginScreen>
                                     style: TextStyle(
                                       color:
                                           isDark
-                                              ? AppColors.white.withOpacity(0.7)
+                                              ? AppColors.white.withValues(
+                                                alpha: 0.7,
+                                              )
                                               : AppColors.darkGrey,
                                       fontSize: 13,
                                     ),
@@ -443,7 +407,10 @@ class _LoginScreenState extends State<LoginScreen>
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.black.withOpacity(0.2) : AppColors.lightGrey,
+        color:
+            isDark
+                ? AppColors.black.withValues(alpha: 0.2)
+                : AppColors.lightGrey,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -471,7 +438,7 @@ class _LoginScreenState extends State<LoginScreen>
               isSelected && !isDark
                   ? [
                     BoxShadow(
-                      color: AppColors.shadowColor.withOpacity(0.1),
+                      color: AppColors.shadowColor.withValues(alpha: 0.1),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -486,7 +453,7 @@ class _LoginScreenState extends State<LoginScreen>
                 isSelected
                     ? (isDark ? AppColors.white : AppColors.primaryBlue)
                     : (isDark
-                        ? AppColors.white.withOpacity(0.5)
+                        ? AppColors.white.withValues(alpha: 0.5)
                         : AppColors.darkGrey),
             fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
             fontSize: 14,

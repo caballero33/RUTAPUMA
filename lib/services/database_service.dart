@@ -317,11 +317,121 @@ class DatabaseService {
         userData['fcmToken'] = fcmToken;
       }
 
-      await _database.child('users').child(userId).set(userData);
       debugPrint('✅ Saved user profile for: $userId');
     } catch (e) {
       debugPrint('❌ Error saving user profile: $e');
       throw Exception('Error al guardar perfil de usuario: ${e.toString()}');
+    }
+  }
+
+  /// Update user's assigned route
+  Future<void> updateUserRoute(String userId, String routeName) async {
+    try {
+      await _database.child('users').child(userId).update({
+        'assignedRoute': routeName,
+      });
+      debugPrint('✅ Updated assigned route $routeName for user $userId');
+    } catch (e) {
+      debugPrint('❌ Error updating user route: $e');
+      // Don't throw, just log
+    }
+  }
+
+  // ==================== ANNOUNCEMENT METHODS ====================
+
+  /// Save a new announcement
+  Future<void> saveAnnouncement({
+    required String driverId,
+    required String driverName, // Optional: if we want to show who sent it
+    required String routeName,
+    required String subject,
+    required String message,
+  }) async {
+    try {
+      final announcementId = _database.child('announcements').push().key;
+
+      await _database.child('announcements').child(announcementId!).set({
+        'driverId': driverId,
+        'driverName': driverName,
+        'routeName': routeName,
+        'subject': subject,
+        'message': message,
+        'timestamp': DateTime.now().toIso8601String(),
+        'type': 'route_update',
+      });
+
+      debugPrint('✅ Saved announcement: $subject');
+    } catch (e) {
+      debugPrint('❌ Error saving announcement: $e');
+      throw Exception('Error al enviar aviso: ${e.toString()}');
+    }
+  }
+
+  /// Get all announcements
+  Stream<List<Map<String, dynamic>>> getAnnouncements() {
+    return _database
+        .child('announcements')
+        .orderByChild('timestamp')
+        .limitToLast(50)
+        .onValue
+        .map((event) {
+          final List<Map<String, dynamic>> announcements = [];
+          if (event.snapshot.exists) {
+            final data = _convertMap(event.snapshot.value);
+            data.forEach((key, value) {
+              final map = _convertMap(value);
+              map['id'] = key;
+              announcements.add(map);
+            });
+            // Sort by timestamp (newest first)
+            announcements.sort((a, b) {
+              final tA =
+                  DateTime.tryParse(a['timestamp'] ?? '') ?? DateTime(2000);
+              final tB =
+                  DateTime.tryParse(b['timestamp'] ?? '') ?? DateTime(2000);
+              return tB.compareTo(tA);
+            });
+          }
+          return announcements;
+        });
+  }
+
+  /// Get bus for a specific driver (active or not)
+  Future<BusModel?> getBusByDriverId(
+    String driverId, {
+    bool requireActive = true,
+  }) async {
+    try {
+      final snapshot =
+          await _database
+              .child('buses')
+              .orderByChild('driverId')
+              .equalTo(driverId)
+              .get();
+
+      if (snapshot.exists) {
+        final data = _convertMap(snapshot.value);
+        BusModel? foundBus;
+
+        // Find the bus entry
+        data.forEach((busId, busData) {
+          try {
+            final bus = BusModel.fromJson(busId, _convertMap(busData));
+            // If we require active, check it. If not, just take it (updating foundBus with latest)
+            if (!requireActive || bus.isActive) {
+              foundBus = bus;
+            }
+          } catch (e) {
+            // ignore parsing errors for other buses
+          }
+        });
+
+        return foundBus;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('❌ Error finding bus for driver: $e');
+      return null;
     }
   }
 }

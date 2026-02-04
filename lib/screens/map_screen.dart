@@ -9,6 +9,7 @@ import '../constants/colors.dart';
 import '../models/user_role.dart';
 import '../models/bus_model.dart';
 import '../providers/theme_provider.dart';
+import '../providers/auth_provider.dart';
 import '../services/database_service.dart';
 import '../services/storage_service.dart';
 import '../services/location_service.dart';
@@ -337,9 +338,15 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _checkLocationPermission();
 
-    // Start monitoring favorite routes for students
-    if (widget.userRole == UserRole.user) {
+    // Start monitoring favorite routes for students AND drivers (so they get notifs)
+    if (widget.userRole == UserRole.user ||
+        widget.userRole == UserRole.driver) {
       _startFavoriteRoutesMonitoring();
+    }
+
+    // Auto-favorite route for drivers
+    if (widget.userRole == UserRole.driver) {
+      _checkAutoFavoriteRoute();
     }
 
     // Listen to active buses from Firebase (for users only)
@@ -364,6 +371,53 @@ class _MapScreenState extends State<MapScreen> {
           debugPrint('✅ Estado actualizado con ${_activeBuses.length} buses');
         }
       });
+    }
+  }
+
+  // Auto-subscribe drivers to their own route
+  Future<void> _checkAutoFavoriteRoute() async {
+    try {
+      // 1. Get driver ID (e.g. BUS0701)
+      final dId = widget.driverId;
+      if (dId == null) return;
+
+      // 2. Parse Route (e.g. Ruta 7)
+      String? routeName;
+      if (dId.startsWith('BUS') && dId.length >= 5) {
+        final routeNum = dId.substring(3, 5);
+        routeName =
+            'Ruta ${int.parse(routeNum)}'; // Auto-remove leading zero via int parse
+      }
+
+      if (routeName != null) {
+        // 3. Check if already favorite
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final user = authProvider.currentUser;
+
+        // Need to know WHO is the user to save to firebase
+        // If we are a local driver, our UID is the driverId
+        final uid = user?.uid ?? dId;
+
+        final favs = await _favoritesService.getFavoriteRoutes();
+        if (!favs.contains(routeName)) {
+          debugPrint('🤖 Auto-favoriting $routeName for Driver $dId');
+          // Use service so it handles OneSignal tags!
+          await _favoritesService.addFavoriteRoute(routeName);
+
+          // 4. Force monitoring restart to pick up the new tag
+          await _routeMonitor.startMonitoring();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('🔔 Te hemos suscrito a avisos de $routeName'),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error auto-favoriting driver route: $e');
     }
   }
 

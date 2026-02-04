@@ -59,6 +59,7 @@ dependencies:
   
   # Local notifications
   flutter_local_notifications: ^17.2.3
+  onesignal_flutter: ^5.4.0
 
 dev_dependencies:
   flutter_test:

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/database_service.dart';
 import '../constants/colors.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/custom_button.dart';
@@ -22,23 +25,98 @@ class _SendMessageScreenState extends State<SendMessageScreen> {
     super.dispose();
   }
 
-  void _sendMessage() {
+  void _sendMessage() async {
     if (_formKey.currentState!.validate()) {
-      // Simulate sending message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Mensaje enviado correctamente',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: AppColors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-      );
-      Navigator.pop(context); // Go back after sending
+      try {
+        // Get current user info
+        // Get current user info
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        var user = authProvider.currentUser;
+
+        // Recovery: If user is null, try to reload session
+        if (user == null) {
+          debugPrint('⚠️ User is null, attempting to restore session...');
+          await authProvider.checkSession();
+          user = authProvider.currentUser;
+        }
+
+        if (user == null)
+          throw Exception('Usuario no autenticado (Sesión perdida)');
+
+        // 1. Try to get route from user profile (fastest/static)
+        String? targetRouteName = user.assignedRoute;
+
+        // 1.5. Fail-safe: If not in profile, try to parse from ID locally (Handle stale sessions)
+        if (targetRouteName == null && user.uid.startsWith('BUS')) {
+          try {
+            if (user.uid.length >= 5) {
+              final routeNumStr = user.uid.substring(3, 5);
+              targetRouteName = 'Ruta $routeNumStr';
+              debugPrint('⚠️ Route parsed locally from ID: $targetRouteName');
+            }
+          } catch (e) {
+            debugPrint('⚠️ Error parsing route locally: $e');
+          }
+        }
+
+        // 2. If not in profile, try to find from assigned bus (fallback)
+        if (targetRouteName == null) {
+          final databaseService = DatabaseService();
+          final assignedBus = await databaseService.getBusByDriverId(
+            user.uid,
+            requireActive: false,
+          );
+
+          if (assignedBus != null) {
+            targetRouteName = assignedBus.routeName;
+
+            // Self-healing: Save this route to user profile for future
+            await DatabaseService().updateUserRoute(user.uid, targetRouteName);
+          }
+        }
+
+        if (targetRouteName == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'No detectamos tu ruta (${user.uid}). Cierra sesión e intenta de nuevo.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Send announcement
+        await DatabaseService().saveAnnouncement(
+          driverId: user.uid,
+          driverName: user.displayName,
+          routeName: targetRouteName,
+          subject: _subjectController.text.trim(),
+          message: _messageController.text.trim(),
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Aviso enviado a usuarios de $targetRouteName'),
+              backgroundColor: AppColors.green,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -85,7 +163,7 @@ class _SendMessageScreenState extends State<SendMessageScreen> {
                   color:
                       isDark
                           ? AppColors.darkAccent
-                          : AppColors.primaryBlue.withOpacity(0.1),
+                          : AppColors.primaryBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color:
@@ -156,7 +234,7 @@ class _SendMessageScreenState extends State<SendMessageScreen> {
                       style: TextStyle(
                         color:
                             isDark
-                                ? AppColors.white.withOpacity(0.8)
+                                ? AppColors.white.withValues(alpha: 0.8)
                                 : AppColors.darkGrey,
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
@@ -182,8 +260,8 @@ class _SendMessageScreenState extends State<SendMessageScreen> {
                       hintStyle: TextStyle(
                         color:
                             isDark
-                                ? AppColors.white.withOpacity(0.3)
-                                : AppColors.grey.withOpacity(0.8),
+                                ? AppColors.white.withValues(alpha: 0.3)
+                                : AppColors.grey.withValues(alpha: 0.8),
                         fontWeight: FontWeight.w500,
                       ),
                       filled: true,

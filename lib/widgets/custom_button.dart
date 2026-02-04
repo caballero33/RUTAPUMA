@@ -27,14 +27,17 @@ class CustomButton extends StatelessWidget {
         color: color ?? Colors.blue,
         border:
             isDark
-                ? Border.all(color: Colors.white.withOpacity(0.1), width: 1)
+                ? Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1,
+                )
                 : null,
         boxShadow:
             isDark
                 ? null
                 : [
                   BoxShadow(
-                    color: (color ?? Colors.blue).withOpacity(0.3),
+                    color: (color ?? Colors.blue).withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),

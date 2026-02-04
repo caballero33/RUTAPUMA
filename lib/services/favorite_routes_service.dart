@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 import 'database_service.dart';
 
@@ -25,6 +26,8 @@ class FavoriteRoutesService {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
+      // Login to OneSignal with Firebase UID
+      OneSignal.login(user.uid);
       await _syncFromFirebase(user.uid);
     } else {
       // Load from local cache if not logged in
@@ -45,6 +48,12 @@ class FavoriteRoutesService {
       );
       _cachedFavorites = favorites;
       await _saveToLocalCache(favorites);
+
+      // Sync tags with OneSignal
+      for (final route in favorites) {
+        OneSignal.User.addTagWithKey("route_$route", "1");
+      }
+
       debugPrint('✅ Synced ${favorites.length} favorites from Firebase');
     } catch (e) {
       debugPrint('❌ Error syncing from Firebase: $e');
@@ -89,6 +98,9 @@ class FavoriteRoutesService {
     _cachedFavorites.add(routeName);
     await _saveToLocalCache(_cachedFavorites);
 
+    // Add tag to OneSignal
+    OneSignal.User.addTagWithKey("route_$routeName", "1");
+
     // Sync to Firebase
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -116,6 +128,9 @@ class FavoriteRoutesService {
     // Remove from local cache immediately
     _cachedFavorites.remove(routeName);
     await _saveToLocalCache(_cachedFavorites);
+
+    // Remove tag from OneSignal
+    OneSignal.User.removeTag("route_$routeName");
 
     // Sync to Firebase
     final user = FirebaseAuth.instance.currentUser;
@@ -154,6 +169,11 @@ class FavoriteRoutesService {
 
   /// Clear all favorites
   Future<void> clearFavorites() async {
+    // Remove all tags from OneSignal
+    for (final route in _cachedFavorites) {
+      OneSignal.User.removeTag("route_$route");
+    }
+
     _cachedFavorites.clear();
     await _saveToLocalCache([]);
 
@@ -175,6 +195,7 @@ class FavoriteRoutesService {
   Future<void> forceSync() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
+      OneSignal.login(user.uid);
       await _syncFromFirebase(user.uid);
     }
   }

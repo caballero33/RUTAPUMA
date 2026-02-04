@@ -25,17 +25,118 @@ class AuthProvider extends ChangeNotifier {
   void _initializeAuth() {
     _authService.authStateChanges.listen((User? user) async {
       if (user != null) {
+        // Firebase User (Student)
         _currentUser = await _authService.getUserData(user.uid);
       } else {
-        _currentUser = null;
+        // Check for local driver session
+        await checkSession();
       }
       notifyListeners();
     });
   }
 
-  // Sign in
+  // Explicitly check and load session from storage
+  Future<void> checkSession() async {
+    try {
+      final session = await _storageService.getSession();
+      if (session != null && session['role'] == UserRole.driver) {
+        final driverId = session['driverId'] as String;
+        _currentUser = _createDriverUser(driverId);
+        debugPrint('✅ Driver session restored: $driverId');
+      } else {
+        // Only set to null if we don't have a firebase user either
+        // (This part is tricky if called from stream listener, but safe if called directly)
+        if (_authService.currentUser == null) {
+          _currentUser = null;
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ Error checking session: $e');
+    }
+  }
+
+  // Create a local UserModel for a driver
+  UserModel _createDriverUser(String driverId) {
+    final routeName = _parseRouteFromDriverId(driverId);
+    return UserModel(
+      uid: driverId,
+      email: '$driverId@rutapuma.local', // Placeholder
+      displayName: 'Conductor $driverId',
+      role: 'DRIVER',
+      createdAt: DateTime.now(),
+      assignedRoute: routeName,
+    );
+  }
+
+  // Helper to parse route from BUSxxYY
+  String _parseRouteFromDriverId(String driverId) {
+    // Format: BUS0101 -> Ruta 01
+    // Format: BUS1402 -> Ruta 14
+    try {
+      if (driverId.length >= 5 && driverId.startsWith('BUS')) {
+        final routeNum = int.parse(driverId.substring(3, 5));
+        return 'Ruta $routeNum';
+      }
+    } catch (_) {}
+    return 'Ruta Desconocida';
+  }
+
+  // Login for Drivers
+  Future<bool> loginDriver(String driverId, String password) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // Validate credentials against hardcoded pattern
+      // Check 14 routes, 2 IDs each
+      bool authenticated = false;
+      for (int r = 1; r <= 14; r++) {
+        final rStr = r.toString().padLeft(2, '0');
+        for (int i = 1; i <= 2; i++) {
+          final iStr = i.toString().padLeft(2, '0');
+          final id = 'BUS$rStr$iStr';
+          final key = 'ruta$rStr$iStr';
+
+          if (driverId.toUpperCase() == id && password == key) {
+            authenticated = true;
+            break;
+          }
+        }
+        if (authenticated) break;
+      }
+
+      if (!authenticated) {
+        throw Exception('ID o Llave del bus incorrecta');
+      }
+
+      // Create and set user
+      _currentUser = _createDriverUser(driverId.toUpperCase());
+
+      // Save session
+      await _storageService.saveSession(
+        email: driverId.toUpperCase(),
+        role: UserRole.driver,
+        driverId: driverId.toUpperCase(),
+        userId: driverId.toUpperCase(),
+      );
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Sign in (Firebase)
   Future<bool> signIn(String email, String password) async {
     _isLoading = true;
+    // ... existing implementation ...
     _errorMessage = null;
     notifyListeners();
 

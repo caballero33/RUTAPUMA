@@ -2,7 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for RUTAPUMA - Favorite Routes Notifications",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "index.js",
   "dependencies": {

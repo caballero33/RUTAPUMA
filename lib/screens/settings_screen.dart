@@ -215,7 +215,7 @@ class SettingsScreen extends StatelessWidget {
                     onChanged: (value) {
                       themeProvider.toggleTheme();
                     },
-                    activeColor: AppColors.primaryYellow,
+                    // activeColor removed to use Theme
                     activeTrackColor: AppColors.primaryYellow.withValues(
                       alpha: 0.5,
                     ),
@@ -242,7 +242,7 @@ class SettingsScreen extends StatelessWidget {
               _buildInfoTile(
                 icon: Icons.fingerprint_rounded,
                 title: 'ID de Usuario',
-                subtitle: user!.uid.substring(0, 12) + '...',
+                subtitle: '${user!.uid.substring(0, 12)}...',
                 isDark: isDark,
               ),
 

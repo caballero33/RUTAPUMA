@@ -4,6 +4,7 @@ class UserModel {
   final String displayName;
   final String role; // 'USER' or 'DRIVER'
   final DateTime createdAt;
+  final String? assignedRoute;
 
   UserModel({
     required this.uid,
@@ -11,6 +12,7 @@ class UserModel {
     required this.displayName,
     required this.role,
     required this.createdAt,
+    this.assignedRoute,
   });
 
   // Convert UserModel to JSON for Firebase
@@ -21,6 +23,7 @@ class UserModel {
       'displayName': displayName,
       'role': role,
       'createdAt': createdAt.toIso8601String(),
+      if (assignedRoute != null) 'assignedRoute': assignedRoute,
     };
   }
 
@@ -32,6 +35,7 @@ class UserModel {
       displayName: json['displayName'] as String,
       role: json['role'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      assignedRoute: json['assignedRoute'] as String?,
     );
   }
 
@@ -42,6 +46,7 @@ class UserModel {
     String? displayName,
     String? role,
     DateTime? createdAt,
+    String? assignedRoute,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -49,6 +54,7 @@ class UserModel {
       displayName: displayName ?? this.displayName,
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
+      assignedRoute: assignedRoute ?? this.assignedRoute,
     );
   }
 }

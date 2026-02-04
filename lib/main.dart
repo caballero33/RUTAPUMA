@@ -8,9 +8,10 @@ import 'models/user_role.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 import 'services/firebase_service.dart';
-import 'services/notification_service.dart';
+
 import 'services/route_monitor_service.dart';
 import 'services/storage_service.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,13 +19,14 @@ void main() async {
   // Initialize Firebase
   await FirebaseService.initialize();
 
-  // Initialize notifications
-  final notificationService = NotificationService();
-  await notificationService.initialize();
-
   // Initialize route monitoring service
   final routeMonitor = RouteMonitorService();
   await routeMonitor.initialize();
+
+  // Initialize OneSignal
+  OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+  OneSignal.initialize("f6b90ee4-f9c1-42f6-9168-36e810b5e658");
+  OneSignal.Notifications.requestPermission(true);
 
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
@@ -94,7 +96,7 @@ class RutaPumaApp extends StatelessWidget {
         primary: baseColor,
         secondary: AppColors.primaryYellow,
         surface: surfaceColor,
-        background: backgroundColor,
+        // background: backgroundColor, // Deprecated
         brightness: brightness,
       ),
       appBarTheme: AppBarTheme(
@@ -129,8 +131,8 @@ class RutaPumaApp extends StatelessWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceColor,
-        labelStyle: TextStyle(color: textColor.withOpacity(0.7)),
-        hintStyle: TextStyle(color: textColor.withOpacity(0.5)),
+        labelStyle: TextStyle(color: textColor.withValues(alpha: 0.7)),
+        hintStyle: TextStyle(color: textColor.withValues(alpha: 0.5)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(20),
           borderSide: BorderSide.none,
